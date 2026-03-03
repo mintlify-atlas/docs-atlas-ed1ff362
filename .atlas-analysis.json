@@ -1,0 +1,116 @@
+{
+  "projectType": "frontend",
+  "projectName": "Andrew Gao's Personal Website",
+  "projectDescription": "A personal website built with Astro featuring Notion-powered CMS for blog posts, projects, and interactive content visualization.",
+  "theme": "palm",
+  "primaryColor": "#292524",
+  "lightColor": "#78716c",
+  "darkColor": "#1c1917",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "environment-setup"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/notion-cms",
+              "architecture/content-sync",
+              "architecture/multi-framework"
+            ]
+          },
+          {
+            "group": "Content Management",
+            "pages": [
+              "content/blog-posts",
+              "content/projects",
+              "content/pages",
+              "content/notion-blocks"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "components/layout",
+              "components/navigation",
+              "components/map",
+              "components/icons"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/local-setup",
+              "development/workflows",
+              "development/styling",
+              "development/testing"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/vercel",
+              "deployment/build-process"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Notion Integration",
+            "pages": [
+              "api/notion-client",
+              "api/notion-cms",
+              "api/notion-parse",
+              "api/notion-download"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/marked",
+              "api/places",
+              "api/satori"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Notion-powered CMS for content management",
+    "Pre-build content synchronization with incremental updates",
+    "Multi-framework architecture (Astro, React, Solid.js)",
+    "Interactive map visualization with Leaflet",
+    "MDX content collections with type-safe schemas",
+    "Custom Notion block-to-Markdown parser",
+    "SEO-optimized with sitemap generation",
+    "Tailwind CSS 4.0 styling with custom typography"
+  ],
+  "publicApiSurface": [
+    "queryNotionDatabase(databaseId, options)",
+    "getBlock(blockId)",
+    "parseBlocks(blocks)",
+    "downloadPostsAsMdx(collection)",
+    "getPageProperties(pageId)",
+    "downloadAsset(url, dest)",
+    "parseRichText(richText)",
+    "Layout component props",
+    "Head component (SEO meta tags)",
+    "Navigation component (Notion-powered)",
+    "Map component (Leaflet integration)",
+    "Icon component",
+    "Content collections: blog, projects"
+  ]
+}
