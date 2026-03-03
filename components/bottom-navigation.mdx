@@ -1,0 +1,147 @@
+---
+title: Bottom navigation
+description: Mobile-friendly bottom navigation bar component built with Solid.js
+---
+
+The `BottomNavigation` component provides a fixed bottom navigation bar for mobile devices, displaying key navigation links with icons.
+
+## Component Location
+
+**File**: `src/components/BottomNavigation.tsx`
+
+## Props
+
+<ParamField path="className" type="string">
+  Optional CSS classes to apply to the component wrapper
+</ParamField>
+
+## Interface
+
+```typescript src/components/BottomNavigation.tsx
+interface BottomNavigationProps {
+  className?: string;
+}
+```
+
+## Features
+
+- **Responsive Design**: Full-width on mobile, styled card on tablet/desktop
+- **Icon Navigation**: Uses the Icon component for consistent iconography
+- **Hover Effects**: Animated hover states with translation and scaling
+- **Solid.js**: Client-side interactive component
+
+## Navigation Items
+
+The component includes three navigation items:
+
+1. **Home** (`/`) - Home icon
+2. **Projects** (`/projects`) - Project icon  
+3. **About** (`/about`) - About icon
+
+## Usage
+
+```astro
+---
+import { BottomNavigation } from '@components/BottomNavigation';
+---
+
+<BottomNavigation client:only="solid-js" />
+```
+
+### With Custom Styling
+
+```astro
+<BottomNavigation 
+  client:only="solid-js" 
+  className="bg-white/95 backdrop-blur"
+/>
+```
+
+## Styling
+
+The component uses Tailwind CSS classes:
+
+```typescript
+// Container styling
+clsx(
+  "flex w-full justify-evenly",
+  "md:mx-auto md:mb-5 md:max-w-prose md:rounded-lg md:border md:shadow-md",
+  "border-t border-gray-300/50"
+)
+
+// Navigation item styling
+clsx(
+  "my-1 px-3 py-2",
+  "rounded-md transition-all",
+  "hover:bg-gray-200/25 hover:backdrop-blur",
+  "hover:-translate-y-2 hover:scale-125"
+)
+```
+
+## NavigationItem Component
+
+The internal `NavigationItem` component handles individual navigation links:
+
+```typescript src/components/BottomNavigation.tsx
+interface NavigationItemProps {
+  icon: JSX.Element;
+  label: string;
+  href: string;
+  className?: string;
+}
+```
+
+<ParamField path="icon" type="JSX.Element" required>
+  Icon element to display (typically from Icon component)
+</ParamField>
+
+<ParamField path="label" type="string" required>
+  Text label to display below the icon
+</ParamField>
+
+<ParamField path="href" type="string" required>
+  Navigation link destination
+</ParamField>
+
+<ParamField path="className" type="string">
+  Optional CSS classes
+</ParamField>
+
+## Responsive Behavior
+
+<Tabs>
+  <Tab title="Mobile">
+    - Full-width layout
+    - Border top only
+    - Fixed to bottom of viewport (when positioned)
+    - Items evenly distributed
+  </Tab>
+  
+  <Tab title="Tablet/Desktop">
+    - Centered with max-width
+    - Rounded corners
+    - Full border with shadow
+    - Bottom margin for spacing
+  </Tab>
+</Tabs>
+
+## Animation
+
+Hover interactions include:
+
+- **Background**: Semi-transparent gray with backdrop blur
+- **Transform**: Translates upward by 8px (`-translate-y-2`)
+- **Scale**: Increases size by 25% (`scale-125`)
+- **Transition**: Smooth `transition-all` animation
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Icon Component" href="/components/icons" icon="icons">
+    Icon library used for navigation items
+  </Card>
+  
+  <Card title="Navigation" href="/components/navigation" icon="bars">
+    Main header navigation component
+  </Card>
+</CardGroup>

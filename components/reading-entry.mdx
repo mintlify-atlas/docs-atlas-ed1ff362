@@ -1,0 +1,139 @@
+---
+title: Reading entry
+description: Component for displaying knowledge/reading log entries from Notion
+---
+
+The `ReadingEntry` component renders individual reading/knowledge entries from a Notion database, typically used on the reading log page.
+
+## Component Location
+
+**File**: `src/components/ReadingEntry.astro`
+
+## Props
+
+<ParamField path="page" type="PageObjectResponse" required>
+  Notion page object containing the reading entry data
+</ParamField>
+
+## Interface
+
+```typescript src/components/ReadingEntry.astro
+export interface Props {
+  page: PageObjectResponse;
+}
+```
+
+## Expected Notion Properties
+
+The component expects the following properties in the Notion page:
+
+<ResponseField name="Tags" type="multi_select">
+  Tags for the entry. Special tag "wow" displays in red.
+</ResponseField>
+
+<ResponseField name="Link" type="url">
+  URL link to the content being referenced
+</ResponseField>
+
+<ResponseField name="Comments and Quotes" type="text">
+  Notes, comments, or quotes from the reading
+</ResponseField>
+
+<ResponseField name="Date" type="date">
+  Date of the reading/entry (ISO format)
+</ResponseField>
+
+## Usage
+
+```astro src/pages/read.astro
+---
+import ReadingEntry from '@components/ReadingEntry.astro';
+import { queryNotionDatabase } from '@lib/notion-cms';
+
+const knowledgeEntries = await queryNotionDatabase(
+  import.meta.env.NOTION_DB_ID_KNOWLEDGE_2025,
+  {
+    sorts: [{ property: 'Date', direction: 'descending' }]
+  }
+);
+---
+
+{knowledgeEntries.map(entry => (
+  <ReadingEntry page={entry} />
+))}
+```
+
+## Rendering Logic
+
+The component renders:
+
+1. **"wow" Tag**: If present, displays as red text
+2. **Link**: Underlined link using the "Comments and Quotes" property as link text
+3. **Date**: Formatted as "MMM d" (e.g., "Jan 15")
+4. **Other Tags**: Displayed in gray with # prefix
+
+## Example Output
+
+```html
+<div>
+  <span class="text-red-500">wow</span>
+  <a class="underline" href="https://example.com">
+    Interesting article about Astro
+  </a>
+  on Jan 15
+  <span class="text-gray-400">#javascript</span>
+  <span class="text-gray-400">#webdev</span>
+</div>
+```
+
+## Styling
+
+The component uses Tailwind CSS classes:
+
+- **"wow" tag**: `text-red-500` (red emphasis)
+- **Link**: `underline` (underlined text)
+- **Other tags**: `text-gray-400` (muted gray)
+
+## Helper Functions
+
+The component uses:
+
+```typescript
+import { parseProperty } from 'src/lib/notion-parse';
+import { format, parseISO } from 'date-fns';
+```
+
+- **parseProperty**: Extracts property values from Notion page objects
+- **format**: Formats dates (from date-fns)
+- **parseISO**: Parses ISO date strings (from date-fns)
+
+## Date Formatting
+
+```typescript
+format(parseISO(parseProperty(page.properties["Date"])), "MMM d")
+```
+
+Converts ISO date string to readable format like "Jan 15".
+
+## Notion Database Schema
+
+Expected database columns:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| Tags | Multi-select | Categories/tags (special: "wow") |
+| Link | URL | Link to content |
+| Comments and Quotes | Text | Notes/quotes |
+| Date | Date | Entry date |
+
+## Related Components
+
+<CardGroup cols={2}>
+  <Card title="Pages Management" href="/content/pages" icon="file">
+    Learn about static pages in Notion
+  </Card>
+  
+  <Card title="Notion Parse Utility" href="/api/notion-parse" icon="code">
+    parseProperty and other parsing utilities
+  </Card>
+</CardGroup>

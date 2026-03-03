@@ -54,8 +54,10 @@
             "pages": [
               "components/layout",
               "components/navigation",
+              "components/bottom-navigation",
               "components/map",
-              "components/icons"
+              "components/icons",
+              "components/reading-entry"
             ]
           },
           {
