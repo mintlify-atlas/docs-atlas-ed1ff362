@@ -1,0 +1,303 @@
+---
+title: Managing Projects
+description: Create and manage project portfolio entries using Notion
+---
+
+Projects are managed through a Notion database and automatically synced to your Astro site during the build process, similar to blog posts.
+
+## Overview
+
+Projects are stored in a Notion database (`NOTION_PROJECTS_DB_ID`) and synced as MDX files to `src/content/projects/` during the pre-build process. This allows you to maintain a portfolio of your work with rich content.
+
+## Database Schema
+
+Your Notion projects database must include these properties (defined in `src/content.config.ts:4-13`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| **title** | Title | Project name (required) |
+| **description** | Text | Project summary/tagline |
+| **path** | Text | URL slug (e.g., `/projects/my-app`) |
+| **published** | Date | Publication or completion date |
+| **dates** | Text | Project duration (e.g., "Jan 2024 - Mar 2024") |
+| **tags** | Text | Technologies or categories (comma-separated) |
+| **public** | Checkbox | Visibility toggle (only `true` projects sync) |
+| **lastEditedTime** | Last edited time | Auto-updated by Notion |
+
+<Note>
+The projects schema includes a `dates` field for showing project duration, which is particularly useful for portfolio entries.
+</Note>
+
+## Creating a Project Entry
+
+<Steps>
+  <Step title="Add a new page to your Notion projects database">
+    Create a new entry in your Notion database specified by `NOTION_PROJECTS_DB_ID`.
+  </Step>
+  
+  <Step title="Configure project properties">
+    Set the following properties:
+    - **title**: Your project name
+    - **description**: Brief summary or tagline
+    - **path**: URL slug (e.g., `/projects/portfolio-site`)
+    - **published**: Project completion or publication date
+    - **dates**: Duration (e.g., "Summer 2024" or "Jan - Mar 2024")
+    - **tags**: Technologies used (e.g., "React, TypeScript, Tailwind")
+    - **public**: Check this box to publish
+  </Step>
+  
+  <Step title="Document your project">
+    Add project details using Notion's block editor:
+    - Project overview and goals
+    - Screenshots or demo videos
+    - Technical implementation details
+    - Challenges and solutions
+    - Links to live demos or repositories
+    
+    See [Notion Blocks](/content/notion-blocks) for formatting options.
+  </Step>
+  
+  <Step title="Sync and build">
+    Run the build command to sync your projects:
+    
+    ```bash
+    pnpm dev
+    ```
+  </Step>
+</Steps>
+
+## Content Sync Process
+
+Projects sync identically to blog posts (`scripts/index.ts:5`):
+
+1. **Query**: `queryNotionDatabase()` fetches all pages where `public: true`
+2. **Check**: Compares `lastEditedTime` to skip unchanged projects
+3. **Parse**: Converts Notion blocks to Markdown
+4. **Assets**: Downloads images and media files locally
+5. **Generate**: Creates `src/content/projects/{page-id}.mdx`
+
+```typescript
+// From scripts/index.ts
+downloadPostsAsMdx("blog");
+downloadPostsAsMdx("projects"); // Projects use same sync function
+```
+
+<Note>
+Both blog posts and projects use the same `downloadPostsAsMdx()` function, ensuring consistent behavior and incremental updates.
+</Note>
+
+## Generated Project Structure
+
+A synced project generates an MDX file with frontmatter:
+
+```mdx
+---
+lastEditedTime: '2024-12-15T10:30:00.000Z'
+published: '2024-12-01'
+description: 'A modern web application built with Astro'
+path: '/projects/my-app'
+dates: 'Fall 2024'
+tags: 'Astro, TypeScript, Tailwind'
+public: 'true'
+title: 'My Awesome App'
+---
+import { Image } from 'astro:assets';
+
+## Project Overview
+
+This project demonstrates...
+```
+
+## Accessing Projects in Code
+
+Query projects using Astro's content collections:
+
+```typescript
+import { getCollection } from 'astro:content';
+
+// Get all published projects
+const projects = await getCollection('projects');
+
+// Filter by technology
+const astroProjects = projects.filter(project => 
+  project.data.tags.includes('Astro')
+);
+
+// Sort by date (newest first)
+const sortedProjects = projects.sort((a, b) => 
+  new Date(b.data.published) - new Date(a.data.published)
+);
+
+// Get featured projects (example custom logic)
+const featured = projects.filter(project => 
+  project.data.tags.includes('featured')
+);
+```
+
+## Project Content Best Practices
+
+<Accordion title="Structure your project documentation">
+  Use a consistent structure for all projects:
+  
+  1. **Overview**: What the project does
+  2. **Problem**: What challenge it solves
+  3. **Solution**: Your approach
+  4. **Technologies**: Stack and tools used
+  5. **Results**: Outcomes or metrics
+  6. **Links**: Live demo, GitHub, etc.
+</Accordion>
+
+<Accordion title="Use rich media effectively">
+  Enhance project pages with:
+  - Screenshots of key features
+  - Demo videos or GIFs
+  - Architecture diagrams
+  - Code snippets showing interesting implementations
+  
+  All media is automatically downloaded and optimized during sync.
+</Accordion>
+
+<Accordion title="Tag comprehensively">
+  Include tags for:
+  - Technologies used (React, Node.js, PostgreSQL)
+  - Project type (web app, mobile, API)
+  - Industry or domain (fintech, education, e-commerce)
+  - Skills demonstrated (frontend, backend, design)
+</Accordion>
+
+<Accordion title="Keep dates informative">
+  The `dates` field is flexible - use whatever format makes sense:
+  - "Jan 2024 - Mar 2024" (specific range)
+  - "Fall 2024" (seasonal)
+  - "2024" (year only)
+  - "Ongoing" (current projects)
+</Accordion>
+
+## Updating Projects
+
+<Steps>
+  <Step title="Edit in Notion">
+    Update project details, add new screenshots, or refine descriptions.
+  </Step>
+  
+  <Step title="Rebuild">
+    The sync detects changes via `lastEditedTime` and only re-downloads updated projects:
+    
+    ```bash
+    pnpm build
+    ```
+  </Step>
+</Steps>
+
+## Common Project Page Patterns
+
+### Embedding Live Demos
+
+Use Notion's embed block to include live demos:
+
+```markdown
+> [https://my-project-demo.vercel.app](https://my-project-demo.vercel.app)
+```
+
+This renders as a blockquote with a link (converted from Notion's bookmark/link_preview block).
+
+### Code Examples
+
+Use Notion's code blocks for syntax-highlighted snippets:
+
+````markdown
+```typescript
+// This gets converted automatically
+const config = {
+  framework: 'Astro',
+  cms: 'Notion'
+};
+```
+````
+
+### Project Galleries
+
+Add multiple images in sequence for a gallery effect:
+
+```markdown
+![Feature 1 screenshot](image1.png)
+![Feature 2 screenshot](image2.png)
+![Feature 3 screenshot](image3.png)
+```
+
+## Differences from Blog Posts
+
+While projects and blog posts share the same schema, they're typically used differently:
+
+| Aspect | Blog Posts | Projects |
+|--------|-----------|----------|
+| **Purpose** | Written content, articles, tutorials | Portfolio showcases, case studies |
+| **Updates** | Rarely updated after publication | May be updated as projects evolve |
+| **Dates field** | Usually empty | Project duration or timeline |
+| **Tags** | Content categories (dev, design) | Technologies and skills |
+| **Length** | Variable, often narrative | Structured documentation |
+
+## Displaying Projects
+
+Example project listing page:
+
+```astro
+---
+import Layout from '@layouts/Layout.astro';
+import { getCollection } from 'astro:content';
+
+const projects = await getCollection('projects');
+const sortedProjects = projects.sort((a, b) => 
+  new Date(b.data.published) - new Date(a.data.published)
+);
+---
+
+<Layout title="Projects" description="My portfolio of work" path="/projects">
+  <div class="grid gap-8 md:grid-cols-2">
+    {sortedProjects.map(project => (
+      <article class="rounded-lg border p-6">
+        <h2 class="text-2xl font-bold">
+          <a href={project.data.path}>{project.data.title}</a>
+        </h2>
+        <p class="text-sm text-gray-600">{project.data.dates}</p>
+        <p class="mt-2">{project.data.description}</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          {project.data.tags.split(',').map(tag => (
+            <span class="rounded bg-stone-200 px-2 py-1 text-xs">
+              {tag.trim()}
+            </span>
+          ))}
+        </div>
+      </article>
+    ))}
+  </div>
+</Layout>
+```
+
+## Troubleshooting
+
+### Project not syncing
+
+**Check:**
+- `NOTION_PROJECTS_DB_ID` environment variable is correct
+- Notion integration has access to the projects database
+- `public` checkbox is enabled for the project
+- Run `pnpm dev` or `pnpm build` to trigger sync
+
+### Schema validation errors
+
+**Check:**
+- All required properties exist in your Notion database
+- Property names match exactly (case-sensitive)
+- Property types are correct (Text, Title, Checkbox, Date)
+- Review `src/content.config.ts:4-13` for the schema definition
+
+### Missing or broken media
+
+If images or videos aren't loading:
+
+1. Check that files were downloaded to `src/assets/` or `public/assets/`
+2. Verify image references in the generated MDX file
+3. Ensure Notion blocks use native image/video blocks, not just links
+
+See [Notion Blocks](/content/notion-blocks) for media handling details.

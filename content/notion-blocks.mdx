@@ -1,0 +1,530 @@
+---
+title: Supported Notion Blocks
+description: Reference guide for Notion block types and their conversion to Markdown
+---
+
+This page documents how Notion blocks are parsed and converted to Markdown/HTML by the site's content parser.
+
+## Overview
+
+The site uses a custom parser (`src/lib/notion-parse.ts`) that converts Notion's block-based content into Markdown and HTML. This allows you to write content in Notion's familiar editor and have it automatically formatted for your website.
+
+## Parsing Flow
+
+```
+Notion Blocks → parse() function → Markdown/HTML → Astro rendering → Final HTML
+```
+
+The main parsing function is `parse()` at `src/lib/notion-parse.ts:130-314`, which recursively processes blocks and their children.
+
+## Text Formatting
+
+### Rich Text Annotations
+
+Notion's text formatting is converted to HTML tags (`src/lib/notion-parse.ts:77-104`):
+
+| Notion | Markdown/HTML | Example |
+|--------|---------------|----------|
+| **Bold** | `<b>text</b>` | <b>bold text</b> |
+| *Italic* | `<i>text</i>` | <i>italic text</i> |
+| Underline | `<u>text</u>` | <u>underlined</u> |
+| ~~Strikethrough~~ | `<s>text</s>` | <s>crossed out</s> |
+| `Code` | `<code>text</code>` | `inline code` |
+| Links | `[text](url)` | [example link](https://example.com) |
+
+### Combined Styles
+
+Multiple styles can be combined:
+
+```html
+<u><s><i><b>all four styles</b></i></s></u>
+```
+
+### Text Colors
+
+Notion's color options are converted to Tailwind CSS classes (`src/lib/notion-parse.ts:12-71`):
+
+| Notion Color | CSS Class | Use Case |
+|--------------|-----------|----------|
+| Gray | `!text-gray-500` | Muted text |
+| Brown | `!text-stone-500` | Earthy tones |
+| Orange | `!text-orange-500` | Warnings, highlights |
+| Yellow | `!text-yellow-500` | Cautions, notes |
+| Green | `!text-green-500` | Success, positive |
+| Blue | `!text-blue-500` | Links, info |
+| Purple | `!text-purple-500` | Special content |
+| Pink | `!text-pink-500` | Accents |
+| Red | `!text-red-500` | Errors, important |
+
+### Background Colors
+
+Background variants use similar classes:
+
+```html
+<span class="!bg-orange-200">highlighted text</span>
+<span class="!bg-blue-200">info background</span>
+```
+
+## Block Types
+
+### Paragraphs
+
+**Notion:** Regular text paragraphs  
+**Converted to:** Plain text with formatting
+
+```markdown
+This is a paragraph with <b>bold</b> and <i>italic</i> text.
+```
+
+**Code reference:** `src/lib/notion-parse.ts:144-156`
+
+<Note>
+Empty paragraphs are converted to `<br />` tags to preserve spacing.
+</Note>
+
+### Headings
+
+**Notion:** Heading 1, Heading 2, Heading 3  
+**Converted to:** Markdown headings
+
+```markdown
+# Heading 1
+## Heading 2
+### Heading 3
+```
+
+**Code reference:** `src/lib/notion-parse.ts:157-162`
+
+### Lists
+
+#### Bulleted Lists
+
+```markdown
+- First item
+- Second item
+  - Nested item
+```
+
+#### Numbered Lists
+
+```markdown
+1. First item
+1. Second item
+1. Third item
+```
+
+**Note:** All numbered items use `1.` - Markdown auto-numbers them.
+
+#### To-Do Lists
+
+```markdown
+- [ ] Unchecked task
+- [x] Completed task
+```
+
+**Code reference:** `src/lib/notion-parse.ts:163-181`
+
+### Quotes
+
+**Notion:** Quote block  
+**Converted to:** Markdown blockquote
+
+```markdown
+> This is a quote
+> with multiple lines
+```
+
+**Code reference:** `src/lib/notion-parse.ts:167-174`
+
+### Code Blocks
+
+**Notion:** Code block with language  
+**Converted to:** Fenced code block
+
+````markdown
+```typescript
+const greeting = "Hello, world!";
+console.log(greeting);
+```
+````
+
+The language is preserved from Notion's code block settings.
+
+**Code reference:** `src/lib/notion-parse.ts:193-201`
+
+### Callouts
+
+**Notion:** Callout block  
+**Converted to:** Code block (temporary)
+
+```markdown
+```
+Callout text with icon
+```
+```
+
+<Note>
+Callout rendering is currently basic. Future versions may use custom components for better styling.
+</Note>
+
+**Code reference:** `src/lib/notion-parse.ts:202-210`
+
+### Toggles
+
+**Notion:** Toggle/disclosure block  
+**Converted to:** HTML `<details>` element
+
+```html
+<details>
+  <summary>Click to expand</summary>
+  Hidden content here
+</details>
+```
+
+**Code reference:** `src/lib/notion-parse.ts:182-189`
+
+### Dividers
+
+**Notion:** Divider block  
+**Converted to:** Markdown horizontal rule
+
+```markdown
+___
+```
+
+**Code reference:** `src/lib/notion-parse.ts:211-212`
+
+## Media Blocks
+
+### Images
+
+**Notion:** Image block  
+**Converted to:** Astro `<Image>` component with optimization
+
+Images are downloaded to `src/assets/` during sync and referenced with dimensions:
+
+```jsx
+<Image 
+  src={import("@assets/file.abc123.png")} 
+  width="1200" 
+  height="800" 
+  format="webp" 
+  alt="Image caption from Notion" 
+/>
+```
+
+**Features:**
+- Automatic download during sync (`src/lib/notion-cms-asset.ts:16-58`)
+- Dimension detection via `probe-image-size`
+- WebP conversion for optimization
+- Alt text from Notion caption
+
+**Code reference:** `src/lib/notion-parse.ts:222-236`
+
+### Videos
+
+**Notion:** Video block  
+**Converted to:** HTML5 `<video>` element
+
+```html
+<video controls>
+  <source src="video-url" />
+</video>
+```
+
+**Code reference:** `src/lib/notion-parse.ts:237-242`
+
+### Audio
+
+**Notion:** Audio block  
+**Converted to:** HTML5 `<audio>` element
+
+```html
+<audio controls src="audio-url">
+  Your browser does not support the <code>audio</code> element.
+</audio>
+```
+
+**Code reference:** `src/lib/notion-parse.ts:263-268`
+
+### PDFs
+
+**Notion:** PDF embed  
+**Converted to:** Embedded PDF viewer
+
+```html
+<span id="label-123">PDF caption</span>
+<object data="pdf-url" type="application/pdf" width="100%" aria-labelledby="label-123">
+  <embed src="pdf-url" />
+  <p>This browser doesn't support embedded PDFs.</p>
+</object>
+```
+
+**Code reference:** `src/lib/notion-parse.ts:243-260`
+
+### Embeds
+
+**Notion:** Embed block (YouTube, etc.)  
+**Converted to:** Markdown link
+
+```markdown
+[Video Title](https://youtube.com/watch?v=...)
+```
+
+**Code reference:** `src/lib/notion-parse.ts:217-221`
+
+### Bookmarks
+
+**Notion:** Bookmark or link preview  
+**Converted to:** Quoted link
+
+```markdown
+> [https://example.com](https://example.com)
+```
+
+**Code reference:** `src/lib/notion-parse.ts:269-275`
+
+## Tables
+
+**Notion:** Table block  
+**Converted to:** HTML table
+
+```html
+<table>
+  <colgroup>
+    <col class="font-bold" />
+  </colgroup>
+  <tr>
+    <th>Header 1</th>
+    <th>Header 2</th>
+  </tr>
+  <tr>
+    <td>Cell 1</td>
+    <td>Cell 2</td>
+  </tr>
+</table>
+```
+
+**Features:**
+- First row as header (if enabled in Notion)
+- First column styling (if enabled in Notion)
+- Automatic HTML table generation
+
+**Code reference:** `src/lib/notion-parse.ts:276-300`
+
+## Unsupported Blocks
+
+These block types are not currently rendered (`src/lib/notion-parse.ts:302-312`):
+
+- Breadcrumb
+- Column list / Column
+- Link to page
+- Template
+- Synced block
+- Child page
+- Child database
+- File (non-media files)
+- Table of contents (returns empty string)
+
+They return an empty string and won't appear in the output.
+
+## Nested Blocks
+
+Blocks can have children, which are automatically processed recursively:
+
+```markdown
+- Parent list item
+  - Nested list item
+    - Deeply nested item
+```
+
+The parser handles nesting with proper indentation (`src/lib/notion-parse.ts:136-140`).
+
+## Special Characters
+
+Less-than signs (`<`) are escaped to prevent HTML injection:
+
+```typescript
+markdown = markdown.replace(/</g, "&lt;");
+```
+
+**Code reference:** `src/lib/notion-parse.ts:85`
+
+## Asset Handling
+
+Media assets (images, videos, PDFs) are handled specially:
+
+<Steps>
+  <Step title="Detection">
+    Parser identifies media blocks during conversion.
+  </Step>
+  
+  <Step title="Download">
+    `getAssetUrl()` downloads the file from Notion to local storage (`src/lib/notion-cms-asset.ts`).
+  </Step>
+  
+  <Step title="Storage">
+    - Images → `src/assets/` (processed by Astro)
+    - Other media → `public/assets/` (served directly)
+  </Step>
+  
+  <Step title="Reference">
+    Generated Markdown references the local file:
+    ```jsx
+    <Image src={import("@assets/file.123.png")} ... />
+    ```
+  </Step>
+</Steps>
+
+### Asset Filename Format
+
+```
+file.{block-id}.{extension}
+```
+
+Example: `file.abc123def456.png`
+
+This ensures unique filenames and allows for incremental updates.
+
+## Equations
+
+**Notion:** Equation block  
+**Converted to:** Plain text (currently)
+
+```
+E = mc^2
+```
+
+<Note>
+Future versions may support LaTeX rendering using a library like KaTeX.
+</Note>
+
+**Code reference:** `src/lib/notion-parse.ts:190-192`
+
+## Writing Notion Content
+
+### Best Practices
+
+<Accordion title="Use semantic headings">
+  Structure your content with Heading 1 for main sections, Heading 2 for subsections, etc. This improves SEO and accessibility.
+</Accordion>
+
+<Accordion title="Add alt text to images">
+  Use Notion's caption feature for images. This becomes the alt text in the rendered HTML.
+</Accordion>
+
+<Accordion title="Test formatting locally">
+  Run `pnpm dev` to see how your Notion content renders before publishing.
+</Accordion>
+
+<Accordion title="Use code blocks with language">
+  Select the programming language in Notion's code block settings for proper syntax highlighting.
+</Accordion>
+
+<Accordion title="Avoid unsupported blocks">
+  Don't rely on breadcrumbs, columns, or other unsupported blocks for critical content.
+</Accordion>
+
+### Content Workflow
+
+<Steps>
+  <Step title="Write in Notion">
+    Draft your content using any supported block types.
+  </Step>
+  
+  <Step title="Format and style">
+    Apply formatting, add images, create tables, etc.
+  </Step>
+  
+  <Step title="Preview locally">
+    Sync and build locally to preview:
+    ```bash
+    pnpm dev
+    ```
+  </Step>
+  
+  <Step title="Refine and iterate">
+    Make adjustments in Notion based on how it renders.
+  </Step>
+  
+  <Step title="Publish">
+    Enable the `public` checkbox (for collections) or trigger a production build (for static pages).
+  </Step>
+</Steps>
+
+## Extending the Parser
+
+To add support for new block types or modify existing ones:
+
+1. **Locate the parser:** `src/lib/notion-parse.ts`
+2. **Find the switch statement:** Line 143
+3. **Add a new case:**
+
+```typescript
+case "your_block_type":
+  return `Custom HTML or Markdown here`;
+```
+
+4. **Handle children if needed:**
+
+```typescript
+case "your_block_type":
+  return html`
+    <div class="custom-block">
+      ${parseRichTextBlock(block.your_block_type)}
+      ${children.join("")}
+    </div>
+  `.concat(EOL);
+```
+
+5. **Test thoroughly:**
+
+```bash
+pnpm test
+pnpm dev
+```
+
+## Troubleshooting
+
+### Block not rendering
+
+**Check:**
+- Block type is supported (see unsupported blocks list)
+- No parsing errors in build logs
+- Content appears in generated MDX file
+
+### Formatting lost
+
+**Check:**
+- Rich text annotations are applied in Notion
+- Tailwind classes are available in your CSS
+- `prose` class is applied to the container element
+
+### Images not loading
+
+**Check:**
+- Image was downloaded to `src/assets/`
+- File permissions allow reading
+- MDX file has correct import statement
+- Notion image block (not just a link to an image)
+
+### Tables rendering incorrectly
+
+**Check:**
+- Table is created as a Notion table block (not a database)
+- Header row/column settings in Notion
+- CSS styles for `<table>` elements
+
+## Performance Considerations
+
+- **Recursive parsing:** Nested blocks are processed recursively, which can be slow for deeply nested content
+- **Asset downloads:** Images and media are downloaded once and cached based on block ID
+- **Incremental sync:** Only changed content is re-parsed (via `lastEditedTime` check)
+- **Build-time only:** Parsing happens once during build, not on every page load
+
+## Related Resources
+
+- **Parser implementation:** `src/lib/notion-parse.ts`
+- **Asset handling:** `src/lib/notion-cms-asset.ts`
+- **Block fetching:** `src/lib/notion-cms.ts`
+- **Notion API docs:** https://developers.notion.com/reference/block

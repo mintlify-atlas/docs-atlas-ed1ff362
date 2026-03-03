@@ -1,0 +1,461 @@
+---
+title: Development Workflows
+description: Best practices and workflows for developing Andrew Gao's personal website
+---
+
+This guide covers common development workflows, best practices, and patterns used in this project.
+
+## Daily Development Workflow
+
+### Starting Your Work
+
+<Steps>
+  <Step title="Pull latest changes">
+    ```bash
+    git checkout main
+    git pull origin main
+    ```
+  </Step>
+
+  <Step title="Create a feature branch">
+    Use descriptive branch names:
+    
+    ```bash
+    # For features
+    git checkout -b feature/add-search-functionality
+    
+    # For bug fixes
+    git checkout -b fix/navigation-mobile-issue
+    ```
+  </Step>
+
+  <Step title="Start development server">
+    ```bash
+    pnpm dev
+    ```
+    
+    This syncs Notion content and starts the dev server at `http://localhost:4321`
+  </Step>
+
+  <Step title="Make your changes">
+    Edit files, test locally, and iterate on your implementation.
+  </Step>
+
+  <Step title="Test and verify">
+    ```bash
+    # Run tests
+    pnpm test
+    
+    # Build production version
+    pnpm build
+    
+    # Preview production build
+    pnpm preview
+    ```
+  </Step>
+
+  <Step title="Commit your work">
+    Write clear, imperative commit messages:
+    
+    ```bash
+    git add .
+    git commit -m "Add search functionality to blog page"
+    git push origin feature/add-search-functionality
+    ```
+  </Step>
+</Steps>
+
+## Content Management Workflows
+
+### Adding Blog Posts
+
+The recommended approach is via Notion:
+
+<Steps>
+  <Step title="Create entry in Notion">
+    Add a new page to the blog database (`NOTION_BLOG_DB_ID`)
+  </Step>
+
+  <Step title="Fill required properties">
+    - **title:** Post title
+    - **description:** SEO description
+    - **path:** URL slug (e.g., `my-post-slug`)
+    - **published:** Publication date
+    - **public:** ✓ (must be checked)
+    - **tags:** Comma-separated tags (optional)
+  </Step>
+
+  <Step title="Write content">
+    Use Notion's block editor to write your post with full markdown support
+  </Step>
+
+  <Step title="Sync to local">
+    Run the sync script or dev server:
+    
+    ```bash
+    pnpm dev
+    ```
+    
+    This generates an MDX file at `src/content/blog/[notion-id].mdx`
+  </Step>
+</Steps>
+
+<Info>
+  The sync process is incremental - it only updates files that have changed based on Notion's `lastEditedTime` property.
+</Info>
+
+### Manual MDX Creation
+
+For content that doesn't come from Notion:
+
+```mdx
+---
+title: "My Post Title"
+description: "SEO-friendly description"
+path: "my-post-slug"
+published: "2026-03-03"
+public: true
+tags: "typescript, astro"
+---
+
+# Content here
+
+Your markdown/MDX content...
+```
+
+Save to `src/content/blog/my-post-slug.mdx`.
+
+## Component Development
+
+### Creating New Components
+
+**File naming conventions:**
+- **Astro components:** PascalCase (e.g., `Navigation.astro`)
+- **React/Solid components:** PascalCase (e.g., `Map.tsx`, `Icon.tsx`)
+- **Utilities:** kebab-case (e.g., `notion-client.ts`)
+
+### Framework Selection Guide
+
+Choose the right framework for your component:
+
+| Use Case | Framework | Example |
+|----------|-----------|----------|
+| Static content | Astro | Layout, article display |
+| Image optimization | React | Astro's `<Image />` component |
+| Interactive UI | Solid.js | Map, navigation, modals |
+| SEO-critical | Astro | Headers, metadata |
+
+### Component Example
+
+**Astro component** (src/components/ArticleCard.astro):
+
+```astro
+---
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+  published: string;
+  class?: string;
+}
+
+const { title, description, path, published, class: className } = Astro.props;
+---
+
+<article class:list={['prose prose-stone', className]}>
+  <h2 class="text-2xl font-bold">
+    <a href={path}>{title}</a>
+  </h2>
+  <time class="text-sm text-stone-600">{published}</time>
+  <p>{description}</p>
+</article>
+```
+
+**Solid.js interactive component:**
+
+```tsx
+import { createSignal } from 'solid-js';
+
+export function Counter() {
+  const [count, setCount] = createSignal(0);
+  
+  return (
+    <button 
+      onClick={() => setCount(count() + 1)}
+      class="px-4 py-2 bg-stone-200 hover:bg-stone-300"
+    >
+      Count: {count()}
+    </button>
+  );
+}
+```
+
+Use in Astro with client directive:
+
+```astro
+---
+import { Counter } from '@components/Counter';
+---
+
+<Counter client:only="solid-js" />
+```
+
+## Page Development
+
+### Creating New Pages
+
+<Steps>
+  <Step title="Create page file">
+    Add a new file in `src/pages/`:
+    
+    ```astro
+    // src/pages/about.astro
+    ---
+    import Layout from '@layouts/Layout.astro';
+    import { getPage } from '../lib/notion-cms-page';
+    import { getBlock } from '../lib/notion-cms';
+    
+    const pageId = import.meta.env.NOTION_PAGE_ID_ABOUT;
+    const page = await getPage(pageId);
+    const blocks = await getBlock(pageId);
+    ---
+    
+    <Layout
+      title="About"
+      description="About this website"
+      path="/about"
+    >
+      <Fragment slot="content">
+        <div class="prose prose-stone">
+          {/* Page content */}
+        </div>
+      </Fragment>
+    </Layout>
+    ```
+  </Step>
+
+  <Step title="Add to navigation">
+    Update the Notion pages database (`NOTION_DB_ID_PAGES`) with:
+    - **Name:** "About"
+    - **Path:** "/about"
+    - **Order:** Numeric position
+    
+    Navigation updates automatically on next build.
+  </Step>
+
+  <Step title="Test the page">
+    Visit `http://localhost:4321/about` to verify
+  </Step>
+</Steps>
+
+## Build-Time Data Fetching
+
+Pages fetch data at build time (SSG), not at request time:
+
+```astro
+---
+import { getCollection } from 'astro:content';
+
+// This runs ONCE during build
+const posts = await getCollection('blog');
+const publishedPosts = posts.filter(post => post.data.public);
+---
+
+<div>
+  {publishedPosts.map(post => (
+    <article>
+      <h2>{post.data.title}</h2>
+      <p>{post.data.description}</p>
+    </article>
+  ))}
+</div>
+```
+
+## Testing Workflow
+
+### Running Tests
+
+```bash
+# Watch mode (runs on file changes)
+pnpm test
+
+# Single run with coverage
+pnpm coverage
+
+# Run specific test file
+pnpm test src/lib/tests/notion-parse.test.ts
+```
+
+### Writing Tests
+
+Create test files in `src/lib/tests/`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { parseRichTextBlock } from '../notion-parse';
+
+describe('parseRichTextBlock', () => {
+  it('should parse bold text', () => {
+    const input = {
+      rich_text: [{
+        type: 'text',
+        text: { content: 'hello', link: null },
+        annotations: { bold: true },
+        plain_text: 'hello'
+      }]
+    };
+    
+    const output = parseRichTextBlock(input);
+    expect(output).toBe('<b>hello</b>');
+  });
+});
+```
+
+See `src/lib/tests/notion-parse.test.ts:1-128` for real examples.
+
+## Git Workflow
+
+### Commit Message Guidelines
+
+Use imperative mood and be descriptive:
+
+**Good:**
+```bash
+git commit -m "Add search functionality to blog page"
+git commit -m "Fix mobile navigation z-index issue"
+git commit -m "Update prose styling for better readability"
+```
+
+**Avoid:**
+```bash
+git commit -m "Updated stuff"
+git commit -m "Fixed bugs"
+git commit -m "WIP"
+```
+
+### Pre-commit Checklist
+
+Before committing:
+
+- [ ] Code is formatted (Prettier auto-formats)
+- [ ] Tests pass (`pnpm test`)
+- [ ] Build succeeds (`pnpm build`)
+- [ ] No TypeScript errors
+- [ ] Environment variables documented if added
+
+### Pull Request Process
+
+<Steps>
+  <Step title="Create PR">
+    Push your branch and open a PR on GitHub
+  </Step>
+
+  <Step title="Fill PR template">
+    ```markdown
+    ## Summary
+    Brief description of changes
+    
+    ## Changes
+    - Added X feature
+    - Fixed Y bug
+    - Updated Z component
+    
+    ## Test Plan
+    - [ ] Tested locally
+    - [ ] Verified on preview deployment
+    - [ ] Checked mobile responsiveness
+    - [ ] Validated SEO metadata
+    ```
+  </Step>
+
+  <Step title="Review preview deployment">
+    Vercel automatically creates a preview deployment for PRs
+  </Step>
+
+  <Step title="Merge to main">
+    Once approved, merge triggers production deployment
+  </Step>
+</Steps>
+
+## Deployment Workflow
+
+The site deploys automatically via Vercel:
+
+1. **Push to main** → Production deployment
+2. **Open PR** → Preview deployment
+3. **Environment variables** → Configured in Vercel dashboard
+
+### Manual Build Check
+
+Before merging to main:
+
+```bash
+# Build production version
+pnpm build
+
+# Preview locally
+pnpm preview
+
+# Visit http://localhost:4321
+```
+
+## Code Organization
+
+### File Structure Pattern
+
+Organize code consistently:
+
+```typescript
+// External imports
+import { marked } from 'marked';
+import type { Block } from '@notionhq/client/build/src/api-endpoints';
+
+// Internal imports
+import { parseRichText } from './notion-parse';
+
+// Types
+interface ParseOptions {
+  format: 'markdown' | 'html';
+}
+
+// Constants
+const DEFAULT_OPTIONS: ParseOptions = { format: 'markdown' };
+
+// Main function
+export function parseBlocks(blocks: Block[], options = DEFAULT_OPTIONS) {
+  // Implementation
+}
+
+// Helpers (private)
+function isHeading(block: Block): boolean {
+  return block.type.startsWith('heading');
+}
+```
+
+## Performance Best Practices
+
+1. **Leverage static generation:** Fetch data at build time, not runtime
+2. **Optimize images:** Use Astro's `<Image />` component for automatic optimization
+3. **Minimize bundle size:** Prefer Solid.js over React for interactive components
+4. **Incremental sync:** Notion sync only updates changed content
+5. **Preload fonts:** Variable fonts are preloaded with `crossorigin` attribute
+
+## Common Pitfalls
+
+<Warning>
+  **Don't fetch data at runtime** - This breaks static generation. Always use build-time data fetching in Astro components.
+</Warning>
+
+<Warning>
+  **Remember client directives** - Interactive components need `client:only="solid-js"` or similar directives to hydrate.
+</Warning>
+
+<Warning>
+  **Check Notion permissions** - If content doesn't sync, verify the Notion integration has access to all databases and pages.
+</Warning>
+
+## Next Steps
+
+- Learn about [styling conventions](/development/styling)
+- Set up [testing workflows](/development/testing)
+- Explore [architecture patterns](/overview/architecture)

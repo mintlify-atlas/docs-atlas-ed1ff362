@@ -1,0 +1,505 @@
+---
+title: Styling Conventions
+description: Tailwind CSS 4.0 styling patterns and conventions for Andrew Gao's personal website
+---
+
+This project uses **Tailwind CSS 4.0** via the Vite plugin, along with custom CSS for typography and animations.
+
+## Tailwind CSS 4.0 Configuration
+
+### Integration
+
+Tailwind is configured through the Vite plugin (astro.config.mjs:38-40):
+
+```javascript
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  vite: {
+    plugins: [tailwindcss()]
+  }
+});
+```
+
+### Global CSS Structure
+
+The main stylesheet is `src/styles/global.css:1-34`:
+
+```css
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@import "./animations.css";
+@import "./prose.css";
+@import "./fonts.css";
+
+html {
+  background-color: theme("colors.stone.100");
+  height: 100%;
+}
+```
+
+<Note>
+  Tailwind 4.0 uses the new `@import "tailwindcss"` syntax instead of the old `@tailwind` directives.
+</Note>
+
+## Typography System
+
+### Variable Fonts
+
+Custom variable fonts are defined in `src/styles/fonts.css:1-27`:
+
+```css
+@supports (font-variation-settings: normal) {
+  @font-face {
+    font-family: "Inter";
+    font-weight: 100 900;
+    font-display: swap;
+    font-style: normal;
+    src: url("/fonts/Inter-Variable-Latin.woff2") format("woff2");
+  }
+
+  @font-face {
+    font-family: "Newsreader";
+    font-weight: 100 900;
+    font-display: swap;
+    font-style: normal;
+    src: url("/fonts/Newsreader-Variable-Latin.woff2") format("woff2");
+  }
+}
+
+@theme {
+  --font-inter: "Inter", sans-serif;
+  --font-newsreader: "Newsreader", serif;
+  --font-serif: var(--font-newsreader);
+  --font-sans: var(--font-inter);
+  --font-arial: "Arial", sans-serif;
+}
+```
+
+**Available font families:**
+
+| Class | Font | Usage |
+|-------|------|-------|
+| `font-sans` | Inter | Body text, UI elements |
+| `font-serif` | Newsreader | Headings, article titles |
+
+### Prose Styling
+
+The Typography plugin is customized in `src/styles/prose.css:1-71`:
+
+```css
+:root {
+  --prose-text-padding: 3px 0px;
+  --prose-heading-line-height: 1.3;
+  --prose-paragraph-line-height: 1.5;
+}
+
+.prose {
+  p {
+    line-height: var(--prose-paragraph-line-height);
+    margin: 0;
+    padding: var(--prose-text-padding);
+  }
+  
+  h1 {
+    font-family: var(--font-serif);
+    font-size: 1.875em;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--prose-heading-line-height);
+    margin-top: 2rem !important;
+  }
+  
+  /* ... more customizations ... */
+}
+```
+
+**Usage in components:**
+
+```astro
+<article class="prose prose-stone prose-lg">
+  <!-- MDX content with proper typography -->
+</article>
+```
+
+**Prose variants:**
+- `prose` - Base typography styles
+- `prose-stone` - Stone color palette
+- `prose-lg` - Larger text size
+
+## Color System
+
+### Background Colors
+
+The default background is stone-100:
+
+```css
+html {
+  background-color: theme("colors.stone.100");
+}
+```
+
+### Notion Block Colors
+
+Notion color annotations are converted to Tailwind classes in the Notion parser:
+
+```typescript
+// Text colors
+gray → text-stone-600
+orange → text-orange-600
+yellow → text-yellow-600
+green → text-green-600
+blue → text-blue-600
+purple → text-purple-600
+pink → text-pink-600
+red → text-red-600
+
+// Background colors
+gray_background → bg-stone-50
+orange_background → bg-orange-50
+yellow_background → bg-yellow-50
+// ... etc
+```
+
+### Color Palette Usage
+
+**Common patterns:**
+
+```html
+<!-- Default backgrounds -->
+<div class="bg-stone-100">
+<div class="bg-white">
+
+<!-- Text colors -->
+<p class="text-stone-900">Primary text</p>
+<p class="text-stone-600">Secondary text</p>
+<p class="text-stone-400">Tertiary text</p>
+
+<!-- Interactive states -->
+<button class="bg-stone-200 hover:bg-stone-300 active:bg-stone-400">
+```
+
+## Responsive Design
+
+### Breakpoints
+
+Tailwind's default breakpoints are used:
+
+| Breakpoint | Pixels | Usage |
+|------------|--------|-------|
+| `sm:` | 640px | Small tablets |
+| `md:` | 768px | Tablets |
+| `lg:` | 1024px | Laptops |
+| `xl:` | 1280px | Desktops |
+| `2xl:` | 1536px | Large screens |
+
+### JavaScript Breakpoint Values
+
+For client-side logic, use `src/lib/breakpoints.ts`:
+
+```typescript
+export const breakpoints = {
+  sm: 640,
+  md: 768,
+  lg: 1024,
+  xl: 1280,
+  '2xl': 1536,
+};
+```
+
+**Usage in components:**
+
+```typescript
+import { breakpoints } from '../lib/breakpoints';
+
+const isMobile = window.innerWidth < breakpoints.md;
+```
+
+### Responsive Patterns
+
+```html
+<!-- Responsive grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+
+<!-- Responsive spacing -->
+<div class="px-4 md:px-8 lg:px-12">
+
+<!-- Responsive text -->
+<h1 class="text-2xl md:text-4xl lg:text-5xl">
+
+<!-- Hide/show by breakpoint -->
+<nav class="hidden md:block">
+<nav class="block md:hidden">
+```
+
+## Layout Patterns
+
+### Container Widths
+
+Standard container pattern:
+
+```html
+<div class="mx-auto max-w-2xl px-4">
+  <!-- Content constrained to 672px with padding -->
+</div>
+```
+
+**Common max-width values:**
+- `max-w-2xl` (672px) - Article content
+- `max-w-4xl` (896px) - Wide content
+- `max-w-6xl` (1152px) - Very wide content
+- `max-w-full` - Full width
+
+### Spacing Scale
+
+Consistent spacing using Tailwind's scale:
+
+```html
+<!-- Margins -->
+<div class="mt-4 mb-8 mx-auto">
+
+<!-- Padding -->
+<div class="p-4 px-6 py-8">
+
+<!-- Gaps -->
+<div class="flex gap-4">
+<div class="grid gap-6">
+```
+
+## Component Styling
+
+### Using class:list
+
+Astro's `class:list` allows conditional classes:
+
+```astro
+---
+const { isActive, className } = Astro.props;
+---
+
+<div class:list={[
+  'base-class',
+  'always-applied',
+  isActive && 'active-class',
+  { 'conditional-class': someCondition },
+  className
+]}>
+```
+
+### Component Props Pattern
+
+```astro
+---
+interface Props {
+  title: string;
+  class?: string;
+}
+
+const { title, class: className } = Astro.props;
+---
+
+<div class:list={['prose prose-stone', className]}>
+  <h1 class="text-4xl font-bold font-serif">{title}</h1>
+</div>
+```
+
+## Custom Animations
+
+Defined in `src/styles/animations.css`:
+
+```css
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+```
+
+**Usage:**
+
+```html
+<div class="animate-slide-down">
+<div class="animate-slide-up">
+```
+
+## Interactive States
+
+### Hover Effects
+
+```html
+<a class="text-blue-600 hover:text-blue-800 hover:underline">
+<button class="bg-stone-200 hover:bg-stone-300 transition-colors">
+```
+
+### Active States
+
+```html
+<button class="active:scale-95 active:bg-stone-400">
+```
+
+### Focus States
+
+```html
+<input class="focus:ring-2 focus:ring-blue-500 focus:outline-none">
+<a class="focus:outline-2 focus:outline-blue-500">
+```
+
+## Special Styling
+
+### Task Lists
+
+Custom styling for task list items (global.css:12-24):
+
+```css
+.task-list-item {
+  list-style: none !important;
+}
+
+.task-list-item-done {
+  text-decoration: line-through;
+  color: theme("colors.gray.500") !important;
+}
+
+input[type="checkbox"]:disabled.task-list-item-checkbox {
+  margin-left: -1.5rem;
+  margin-right: 0.75rem;
+}
+```
+
+### Navigation States
+
+CSS-only navigation toggling:
+
+```css
+#nav-menu-state:target ~ #nav-menu-container .nav-menu-open {
+  display: none;
+}
+
+#nav-menu-state:target ~ #nav-menu-container .nav-menu-close {
+  display: block;
+}
+```
+
+## Best Practices
+
+### Do's
+
+<Check>
+  **Use Tailwind utility classes** instead of writing custom CSS when possible
+</Check>
+
+<Check>
+  **Follow the spacing scale** - Use `4`, `6`, `8`, `12`, `16` instead of arbitrary values
+</Check>
+
+<Check>
+  **Use semantic color names** - `stone`, `blue`, `green` instead of generic `gray-500`
+</Check>
+
+<Check>
+  **Leverage prose plugin** for content-heavy pages
+</Check>
+
+<Check>
+  **Use responsive prefixes** consistently - mobile-first approach
+</Check>
+
+### Don'ts
+
+<Warning>
+  **Avoid arbitrary values** like `w-[347px]` unless absolutely necessary
+</Warning>
+
+<Warning>
+  **Don't override prose styles** with `!important` - extend instead
+</Warning>
+
+<Warning>
+  **Avoid inline styles** - use Tailwind classes or CSS variables
+</Warning>
+
+## Dark Mode (Future)
+
+Currently, the site uses a light theme only. For dark mode in the future:
+
+```html
+<div class="bg-white dark:bg-stone-900">
+<p class="text-stone-900 dark:text-stone-100">
+```
+
+## Prettier Configuration
+
+Tailwind classes are automatically sorted via Prettier (prettier.config.cjs:1-13):
+
+```javascript
+module.exports = {
+  plugins: [
+    "prettier-plugin-tailwindcss",
+    "prettier-plugin-astro"
+  ]
+};
+```
+
+This ensures consistent class order across the codebase.
+
+## Examples from the Codebase
+
+### Layout Component
+
+```astro
+<div class="mx-auto max-w-2xl px-4">
+  <article class="prose prose-stone prose-lg">
+    <h1 class="font-serif text-4xl font-bold">{title}</h1>
+    <div class="mt-8">
+      <slot name="content" />
+    </div>
+  </article>
+</div>
+```
+
+### Button Styles
+
+```html
+<button class="rounded-lg bg-stone-200 px-4 py-2 font-medium transition-colors hover:bg-stone-300 active:bg-stone-400">
+  Click me
+</button>
+```
+
+### Card Component
+
+```html
+<article class="rounded-lg border border-stone-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+  <h2 class="font-serif text-2xl font-bold text-stone-900">
+    Card Title
+  </h2>
+  <p class="mt-2 text-stone-600">
+    Card description
+  </p>
+</article>
+```
+
+## Resources
+
+- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
+- [Tailwind Typography Plugin](https://tailwindcss.com/docs/typography-plugin)
+- [Tailwind CSS 4.0 Migration](https://tailwindcss.com/docs/upgrade-guide)
+- Project files:
+  - `src/styles/global.css` - Global styles
+  - `src/styles/fonts.css` - Font definitions
+  - `src/styles/prose.css` - Typography overrides
+  - `src/styles/animations.css` - Custom animations

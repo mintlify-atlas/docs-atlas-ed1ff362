@@ -1,0 +1,78 @@
+---
+title: 'Notion Client'
+description: 'Singleton Notion API client instance used across the application'
+---
+
+## Overview
+
+The Notion client module exports a pre-configured singleton instance of the official Notion SDK client. This client is authenticated using the `NOTION_TOKEN` environment variable and is used by all other Notion integration modules.
+
+## Module Export
+
+### `notion`
+
+The default export is a configured `Client` instance from `@notionhq/client`.
+
+```typescript
+import notion from './notion-client';
+```
+
+## Implementation
+
+```typescript
+import { Client } from "@notionhq/client";
+import "dotenv/config";
+
+// Create the Notion client
+const notion = new Client({
+  auth: process.env.NOTION_TOKEN,
+});
+
+export default notion;
+```
+
+## Configuration
+
+<ParamField path="NOTION_TOKEN" type="string" required>
+  Notion API integration token. Set this environment variable before using the client.
+  
+  Get your token from: https://www.notion.so/my-integrations
+</ParamField>
+
+## Usage
+
+All Notion API operations in this codebase use this shared client instance:
+
+```typescript
+import notion from '@lib/notion-client';
+
+// Query a database
+const response = await notion.databases.retrieve({ 
+  database_id: databaseId 
+});
+
+// Retrieve a page
+const page = await notion.pages.retrieve({ 
+  page_id: pageId 
+});
+
+// List block children
+const blocks = await notion.blocks.children.list({
+  block_id: blockId,
+  page_size: 100,
+});
+```
+
+## Related Modules
+
+- [Notion CMS](/api/notion-cms) - Database and block querying functions
+- [Notion Parse](/api/notion-parse) - Notion to Markdown conversion
+- [Notion Download](/api/notion-download) - Pre-build content sync
+
+## Source Reference
+
+**File:** `src/lib/notion-client.ts`
+
+**Dependencies:**
+- `@notionhq/client` - Official Notion JavaScript SDK
+- `dotenv/config` - Environment variable loading

@@ -1,0 +1,361 @@
+---
+title: Notion CMS Integration
+description: How Notion is used as a headless CMS for content management in Andrew Gao's personal website
+---
+
+## Overview
+
+This website uses **Notion databases as a headless CMS**, leveraging the official Notion JavaScript SDK to fetch and transform content. The integration is built around a custom set of utilities in `src/lib/notion-*.ts` that handle API communication, content parsing, and asset management.
+
+## Notion API Client
+
+The API client is implemented as a singleton to ensure consistent configuration across the application.
+
+<CodeGroup>
+```typescript src/lib/notion-client.ts
+import { Client } from '@notionhq/client';
+
+const notion = new Client({
+  auth: import.meta.env.NOTION_TOKEN,
+});
+
+export default notion;
+```
+
+```typescript Usage
+import notion from './notion-client';
+
+const response = await notion.databases.query({
+  database_id: databaseId,
+});
+```
+</CodeGroup>
+
+<Note>
+  The singleton pattern prevents multiple client instances and ensures the API token is read once from environment variables.
+</Note>
+
+## Database Querying
+
+### Data Source Resolution
+
+Notation's 2025 API update introduced data sources. The integration automatically resolves database IDs to data source IDs with caching:
+
+```typescript
+// src/lib/notion-cms.ts:27-63
+const dataSourceIdCache = new Map<string, string>();
+
+export async function getDataSourceId(databaseId: string): Promise<string> {
+  // Check cache first
+  if (dataSourceIdCache.has(databaseId)) {
+    return dataSourceIdCache.get(databaseId)!;
+  }
+
+  const response = await notion.databases.retrieve({ database_id: databaseId });
+  const database = ensureFullResponse<DatabaseObjectResponse, PartialDatabaseObjectResponse>(response);
+
+  if (!database.data_sources || database.data_sources.length === 0) {
+    throw new Error(`No data sources found for database: ${databaseId}`);
+  }
+
+  const dataSourceId = database.data_sources[0].id;
+  
+  // Cache for subsequent queries
+  dataSourceIdCache.set(databaseId, dataSourceId);
+  
+  return dataSourceId;
+}
+```
+
+<Tip>
+  The cache persists for the duration of the build process, avoiding redundant API calls when querying the same database multiple times.
+</Tip>
+
+### Query Helper Function
+
+The `queryNotionDatabase` function provides a high-level interface with automatic pagination:
+
+```typescript
+// src/lib/notion-cms.ts:73-111
+export async function queryNotionDatabase(
+  databaseId: string,
+  options?: Omit<QueryDataSourceParameters, 'data_source_id'>,
+): Promise<PageObjectResponse[]> {
+  const dataSourceId = await getDataSourceId(databaseId);
+
+  const pages: PageObjectResponse[] = [];
+  let cursor = undefined;
+  
+  while (true) {
+    const { results, next_cursor } = await notion.dataSources.query({
+      ...options,
+      data_source_id: dataSourceId,
+      start_cursor: cursor,
+    });
+
+    for (const result of results) {
+      if ('object' in result && result.object === 'page') {
+        const page = ensureFullResponse<PageObjectResponse, PartialPageObjectResponse>(result);
+        pages.push(page);
+      }
+    }
+
+    if (!next_cursor) break;
+    cursor = next_cursor;
+  }
+
+  return pages;
+}
+```
+
+<Warning>
+  Always use `ensureFullResponse()` to convert partial responses to full responses. Partial responses lack critical fields needed for parsing.
+</Warning>
+
+### Example: Fetching Blog Posts
+
+```typescript
+import { queryNotionDatabase } from './notion-cms';
+
+const posts = await queryNotionDatabase(import.meta.env.NOTION_BLOG_DB_ID, {
+  filter: {
+    and: [
+      {
+        property: 'public',
+        checkbox: { equals: true },
+      },
+    ],
+  },
+  sorts: [
+    {
+      property: 'published',
+      direction: 'descending',
+    },
+  ],
+});
+```
+
+## Database Schema
+
+Both blog and project databases follow a consistent schema defined in `src/content.config.ts`:
+
+<ResponseField name="lastEditedTime" type="Date" required>
+  Notion's last modification timestamp, used for incremental sync
+</ResponseField>
+
+<ResponseField name="published" type="string" required>
+  Publication date in YYYY-MM-DD format
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  SEO meta description for the post/project
+</ResponseField>
+
+<ResponseField name="path" type="string" required>
+  URL slug (e.g., "my-blog-post")
+</ResponseField>
+
+<ResponseField name="tags" type="string">
+  Comma-separated tags for categorization
+</ResponseField>
+
+<ResponseField name="public" type="boolean" required>
+  Visibility toggle - only public items are synced
+</ResponseField>
+
+<ResponseField name="title" type="string" required>
+  Page title
+</ResponseField>
+
+<ResponseField name="dates" type="string">
+  Optional date range (projects only)
+</ResponseField>
+
+## Block Fetching
+
+The `getBlock` function recursively fetches all child blocks and downloads associated assets:
+
+```typescript
+// src/lib/notion-cms.ts:143-181
+export async function getBlock(blockId: string) {
+  let content = await getBlockChildren(blockId);
+
+  return Promise.all(
+    content.map(async (blockResponse) => {
+      const block = ensureFullResponse<BlockObjectResponse, PartialBlockObjectResponse>(blockResponse);
+
+      const blockType = block.type;
+      
+      // Download supported media types
+      if (
+        blockType === "image" ||
+        blockType === "video" ||
+        blockType === "audio" ||
+        blockType === "pdf"
+      ) {
+        if (block[blockType].type === "file") {
+          // Download asset and remap URL to local path
+          block[blockType].file.url = await getAssetUrl(
+            block.id,
+            block[blockType].file.url,
+            blockType === "image",
+          );
+        }
+      }
+
+      // Recursively fetch children
+      if (block.has_children) {
+        (block as any).children = await getBlockChildren(block.id);
+      }
+
+      return block;
+    }),
+  );
+}
+```
+
+<Info>
+  The recursive structure ensures nested content (like toggle lists or indented bullets) is fully captured.
+</Info>
+
+## Page Properties
+
+The `getPageProperties` function extracts metadata from Notion pages:
+
+```typescript
+// src/lib/notion-cms-page.ts:9-25
+export async function getPageProperties(pageId: string): Promise<any> {
+  const response = await notion.pages.retrieve({ page_id: pageId });
+  const fullResponse = ensureFullResponse<PageObjectResponse, PartialPageObjectResponse>(response);
+
+  const properties = fullResponse.properties;
+  const result = {};
+
+  Object.keys(properties).forEach((key) => {
+    const property = properties[key];
+    result[key] = parseProperty(property);  // Converts to plain strings
+  });
+
+  return result;
+}
+```
+
+This is used to generate MDX frontmatter (see `src/lib/notion-download.ts:11-24`).
+
+## Asset Management
+
+Notion assets are downloaded locally to avoid expiring URLs and improve performance.
+
+### Download Strategy
+
+```typescript
+// src/lib/notion-cms-asset.ts:16-58
+export async function getAssetUrl(
+  blockId: string,
+  url: string,
+  isImage: boolean = false
+): Promise<string> {
+  const downloadPath = isImage ? ASSET_SRC_PATH : ASSET_PUBLIC_PATH;
+
+  const files = await fs.promises.readdir(downloadPath);
+  let filename = files.find((file) => file.includes(blockId));
+
+  if (!filename) {
+    // Download file if not exists
+    const res = await fetch(url);
+    const ext = mime.extension(res.headers.get("content-type")) || "unknown";
+    filename = `file.${blockId}.${ext}`;
+
+    const dest = path.join(downloadPath, filename);
+    const file = fs.createWriteStream(dest);
+    await once(res.body.pipe(file), "finish");
+  }
+
+  if (isImage) {
+    // Get dimensions for Astro Image component
+    const { width, height } = await getImageDimensions(filename, true);
+    const params = new URLSearchParams({ w: width.toString(), h: height.toString() });
+    const src = path.join("@assets", filename);
+    return `{import("${src}")}?${params}`;
+  }
+
+  return path.join("/assets", filename);
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Images" icon="image">
+    Downloaded to `src/assets/` for Astro optimization
+    
+    Includes width/height metadata for responsive images
+  </Card>
+  
+  <Card title="Other Media" icon="file">
+    Downloaded to `public/assets/` for direct serving
+    
+    Includes video, audio, PDF files
+  </Card>
+</CardGroup>
+
+## Type Safety
+
+All Notion API responses use official TypeScript types:
+
+```typescript
+import type {
+  BlockObjectResponse,
+  PageObjectResponse,
+  DatabaseObjectResponse,
+  PartialBlockObjectResponse,
+  PartialPageObjectResponse,
+  PartialDatabaseObjectResponse,
+} from '@notionhq/client/build/src/api-endpoints';
+```
+
+The `ensureFullResponse` type guard eliminates partial responses:
+
+```typescript
+export function ensureFullResponse<T, PT>(result: T | PT): T {
+  return result as Extract<T, { parent: {} }>;
+}
+```
+
+## API Rate Limiting
+
+The Notion API has rate limits (3 requests/second). The integration handles this through:
+
+1. **Incremental sync**: Only fetches changed content
+2. **Caching**: Data source IDs are cached
+3. **Build-time only**: No runtime API calls
+
+<Tip>
+  If you encounter rate limits during development, consider implementing exponential backoff or reducing the number of databases being synced.
+</Tip>
+
+## Error Handling
+
+```typescript
+try {
+  const blocks = await getBlock(pageId);
+  // Process blocks
+} catch (error) {
+  console.error('Failed to fetch Notion content:', error);
+  // Fall back to cached content or show error page
+}
+```
+
+<Warning>
+  Always handle Notion API errors gracefully. Network issues or API changes can cause builds to fail.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Content Sync Process" href="/architecture/content-sync" icon="arrows-rotate">
+    Learn how Notion content is converted to MDX files
+  </Card>
+  
+  <Card title="Architecture Overview" href="/architecture/overview" icon="sitemap">
+    Return to the high-level architecture guide
+  </Card>
+</CardGroup>

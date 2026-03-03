@@ -1,0 +1,231 @@
+---
+title: "satori"
+description: "OG image generation utility using Satori for SVG rendering"
+---
+
+Utility for generating Open Graph images dynamically using the Satori library.
+
+## Overview
+
+Satori converts React/JSX elements into SVG images, ideal for generating social media preview images (Open Graph, Twitter Cards) at build time.
+
+## Import
+
+```typescript
+import { generateImage } from '@lib/satori';
+```
+
+## Functions
+
+### loadFont()
+
+Loads a font file from the `public/fonts/` directory.
+
+<ParamField path="filename" type="string" required>
+  Font file name (e.g., "Inter-Medium.woff")
+</ParamField>
+
+<ResponseField name="buffer" type="Promise<Buffer>">
+  Font file buffer for use in Satori rendering
+</ResponseField>
+
+```typescript
+async function loadFont(filename: string) {
+  const fontPath = join(process.cwd(), "public", "fonts", filename);
+  return fs.readFile(fontPath);
+}
+```
+
+**Pre-loaded fonts:**
+- `Inter-Medium.woff` (weight 500)
+
+### generateImage()
+
+Generates an SVG image from text using Satori.
+
+<ParamField path="text" type="string" required>
+  Text content to render in the image
+</ParamField>
+
+<ParamField path="width" type="number" default={200}>
+  Image width in pixels
+</ParamField>
+
+<ParamField path="height" type="number" default={200}>
+  Image height in pixels
+</ParamField>
+
+<ResponseField name="svg" type="Promise<string>">
+  SVG markup as a string
+</ResponseField>
+
+## Implementation Details
+
+### JSX Structure
+
+The generated image uses a simple flexbox layout:
+
+```tsx
+{
+  type: "div",
+  props: {
+    children: [
+      {
+        type: "span",
+        props: {
+          children: text,
+          tw: "text-black text-xl p-1",
+        },
+      },
+    ],
+    style: { display: "flex", backgroundColor: "white" },
+  },
+}
+```
+
+### Tailwind Support
+
+Satori supports Tailwind-like utility classes via the `tw` prop:
+- `text-black`: Black text color
+- `text-xl`: Extra-large font size
+- `p-1`: Padding of 1 unit
+
+### Font Configuration
+
+```typescript
+fonts: [
+  {
+    name: "Inter",
+    data: interMedium,
+    style: "normal",
+    weight: 500,
+  },
+]
+```
+
+## Usage Example
+
+### Basic Usage
+
+```typescript
+import { generateImage } from '@lib/satori';
+
+const svg = await generateImage("Hello World");
+// Returns: <svg>...</svg> (200x200px)
+```
+
+### Custom Dimensions
+
+```typescript
+import { generateImage } from '@lib/satori';
+
+const ogImage = await generateImage(
+  "My Blog Post Title",
+  1200,
+  630
+);
+
+// Save to file
+import fs from 'fs/promises';
+await fs.writeFile('og-image.svg', ogImage);
+```
+
+### Convert to PNG (with Sharp)
+
+```typescript
+import { generateImage } from '@lib/satori';
+import sharp from 'sharp';
+
+const svg = await generateImage("Preview Text", 1200, 630);
+const pngBuffer = await sharp(Buffer.from(svg))
+  .png()
+  .toBuffer();
+
+await fs.writeFile('og-image.png', pngBuffer);
+```
+
+## Standard OG Image Sizes
+
+<ParamField path="Facebook/LinkedIn" type="dimensions">
+  1200 x 630 pixels (recommended)
+</ParamField>
+
+<ParamField path="Twitter" type="dimensions">
+  1200 x 600 pixels or 1200 x 628 pixels
+</ParamField>
+
+<ParamField path="Instagram" type="dimensions">
+  1080 x 1080 pixels (square)
+</ParamField>
+
+## Configuration
+
+### Adding Custom Fonts
+
+1. Place font file in `public/fonts/`
+2. Load font using `loadFont()`
+3. Add to `fonts` array in Satori config
+
+```typescript
+const interBold = await loadFont("Inter-Bold.woff");
+
+const svg = await satori(
+  /* JSX */,
+  {
+    fonts: [
+      { name: "Inter", data: interMedium, weight: 500 },
+      { name: "Inter", data: interBold, weight: 700 },
+    ],
+  }
+);
+```
+
+### Custom JSX Elements
+
+Satori supports various HTML-like elements:
+
+```typescript
+await satori(
+  {
+    type: "div",
+    props: {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: "#f3f4f6",
+        padding: "2rem",
+      },
+      children: [
+        {
+          type: "h1",
+          props: {
+            children: "Title",
+            style: { fontSize: 48, fontWeight: 700 },
+          },
+        },
+        {
+          type: "p",
+          props: {
+            children: "Description text",
+            style: { fontSize: 24, color: "#6b7280" },
+          },
+        },
+      ],
+    },
+  },
+  { width: 1200, height: 630, fonts: [/* ... */] }
+);
+```
+
+## Limitations
+
+- Only supports subset of CSS properties (flexbox-focused)
+- No support for CSS Grid
+- Limited text wrapping (use explicit line breaks)
+- Requires font files to be loaded as buffers
+
+## Related
+
+- Satori Documentation: https://github.com/vercel/satori
+- Used for: Open Graph image generation
+- Source: `src/lib/satori.tsx:1`

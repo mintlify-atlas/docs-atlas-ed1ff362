@@ -1,0 +1,356 @@
+---
+title: Managing Static Pages
+description: Create and update static pages using Notion page content
+---
+
+Static pages are built from individual Notion pages that are fetched at build time and rendered as HTML.
+
+## Overview
+
+Unlike blog posts and projects which use Notion **databases**, static pages are individual Notion **pages** that are fetched at build time. This is useful for content-heavy pages like your homepage, about page, or custom landing pages.
+
+## Static Pages vs Collections
+
+This site uses two different Notion content strategies:
+
+| Type | Source | Use Case | Sync Method |
+|------|--------|----------|-------------|
+| **Static Pages** | Individual Notion pages | Homepage, about, custom pages | Fetched at build time via API |
+| **Collections** | Notion databases | Blog posts, projects, repeated content | Pre-build sync to MDX files |
+
+<Note>
+Static pages are fetched fresh during each build using the Notion API, while collection content is synced to local MDX files during the pre-build step.
+</Note>
+
+## Environment Variables
+
+Static pages are referenced by their Notion page IDs in environment variables:
+
+```bash
+# Individual page IDs
+NOTION_PAGE_ID_HOME=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_BLOG=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_READ=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_PLACES=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# You can add more custom pages
+NOTION_PAGE_ID_ABOUT=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_CONTACT=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+## Getting a Notion Page ID
+
+<Steps>
+  <Step title="Find your Notion page">
+    Navigate to the page you want to use in Notion.
+  </Step>
+  
+  <Step title="Copy the page link">
+    Click "Share" → "Copy link" or click the `...` menu → "Copy link".
+  </Step>
+  
+  <Step title="Extract the page ID">
+    The URL looks like:
+    ```
+    https://www.notion.so/Page-Title-abc123def456...
+    ```
+    
+    The page ID is the 32-character string at the end (with dashes removed):
+    ```
+    abc123def456...
+    ```
+  </Step>
+  
+  <Step title="Add to environment variables">
+    Add it to your `.env` file:
+    ```bash
+    NOTION_PAGE_ID_ABOUT=abc123def456...
+    ```
+  </Step>
+</Steps>
+
+## Creating a Static Page
+
+<Steps>
+  <Step title="Create a Notion page">
+    Create a new page in Notion with your content. Use any Notion blocks you want - headings, paragraphs, images, etc.
+  </Step>
+  
+  <Step title="Share with integration">
+    Make sure your Notion integration has access to this page:
+    - Click "Share" in the top right
+    - Invite your integration
+  </Step>
+  
+  <Step title="Get the page ID">
+    Follow the steps above to extract the page ID.
+  </Step>
+  
+  <Step title="Create an Astro page">
+    Create a new file in `src/pages/` (e.g., `src/pages/about.astro`):
+    
+    ```astro
+    ---
+    import Layout from '@layouts/Layout.astro';
+    import { getPage } from '@lib/notion-cms-page';
+    import { getBlock } from '@lib/notion-cms';
+    import { parseBlocks } from '@lib/notion-parse';
+    
+    // Fetch page data at build time
+    const pageId = import.meta.env.NOTION_PAGE_ID_ABOUT;
+    const page = await getPage(pageId);
+    const blocks = await getBlock(pageId);
+    const content = parseBlocks(blocks);
+    
+    // Get page title from properties
+    const title = page.properties.title?.title?.[0]?.plain_text || 'About';
+    ---
+    
+    <Layout 
+      title={title} 
+      description="About me" 
+      path="/about"
+    >
+      <Fragment slot="content">
+        <article class="prose prose-stone" set:html={content} />
+      </Fragment>
+    </Layout>
+    ```
+  </Step>
+  
+  <Step title="Build and test">
+    Run your development server:
+    ```bash
+    pnpm dev
+    ```
+    
+    Navigate to `/about` to see your page.
+  </Step>
+</Steps>
+
+## Fetching Page Content
+
+There are two main functions for working with Notion pages:
+
+### getPage()
+
+Fetches page metadata and properties (`src/lib/notion-cms-page.ts:9-25`):
+
+```typescript
+import { getPage } from '@lib/notion-cms-page';
+
+const page = await getPage(pageId);
+
+// Access properties
+const title = page.properties.title?.title?.[0]?.plain_text;
+```
+
+### getBlock()
+
+Fetches page content blocks recursively (`src/lib/notion-cms.ts`):
+
+```typescript
+import { getBlock } from '@lib/notion-cms';
+import { parseBlocks } from '@lib/notion-parse';
+
+const blocks = await getBlock(pageId);
+const markdown = parseBlocks(blocks);
+```
+
+### Full Example
+
+```astro
+---
+import { getPage } from '@lib/notion-cms-page';
+import { getBlock } from '@lib/notion-cms';
+import { parseBlocks } from '@lib/notion-parse';
+
+// 1. Fetch page metadata
+const page = await getPage(import.meta.env.NOTION_PAGE_ID_HOME);
+
+// 2. Fetch content blocks
+const blocks = await getBlock(page.id);
+
+// 3. Convert to markdown/HTML
+const content = parseBlocks(blocks);
+---
+
+<!-- 4. Render the content -->
+<div set:html={content} />
+```
+
+## Build-Time Rendering
+
+Static pages are rendered at **build time**, not on every request:
+
+```
+Build starts → Fetch Notion page → Parse blocks → Generate HTML → Static site
+```
+
+<Note>
+This means updates to your Notion page won't appear on your site until you rebuild and redeploy. This is intentional for performance and reliability.
+</Note>
+
+## Updating Static Pages
+
+<Steps>
+  <Step title="Edit in Notion">
+    Make changes to your Notion page content.
+  </Step>
+  
+  <Step title="Trigger a rebuild">
+    Rebuild your site locally or trigger a deployment:
+    ```bash
+    pnpm build
+    ```
+    
+    Or push to your main branch to trigger automatic deployment.
+  </Step>
+  
+  <Step title="Verify changes">
+    The updated content will be fetched and rendered during the build process.
+  </Step>
+</Steps>
+
+## Advanced: Custom Content Processing
+
+You can process Notion content before rendering:
+
+```astro
+---
+import { getBlock } from '@lib/notion-cms';
+import { parseBlocks } from '@lib/notion-parse';
+import { marked } from 'marked';
+
+const blocks = await getBlock(pageId);
+const markdown = parseBlocks(blocks);
+
+// Custom markdown processing
+const html = marked.parse(markdown, {
+  renderer: new marked.Renderer(),
+  gfm: true,
+  breaks: true
+});
+---
+
+<div set:html={html} />
+```
+
+## Example: Homepage with Sections
+
+You can structure complex pages by using Notion's heading blocks as section dividers:
+
+```astro
+---
+import { getBlock } from '@lib/notion-cms';
+
+const blocks = await getBlock(import.meta.env.NOTION_PAGE_ID_HOME);
+
+// Find heading blocks to create sections
+const sections = [];
+let currentSection = { title: '', blocks: [] };
+
+for (const block of blocks) {
+  if (block.type === 'heading_1') {
+    if (currentSection.title) sections.push(currentSection);
+    currentSection = { 
+      title: block.heading_1.rich_text[0]?.plain_text,
+      blocks: [] 
+    };
+  } else {
+    currentSection.blocks.push(block);
+  }
+}
+sections.push(currentSection);
+---
+
+{sections.map(section => (
+  <section>
+    <h2>{section.title}</h2>
+    <div set:html={parseBlocks(section.blocks)} />
+  </section>
+))}
+```
+
+## Navigation Integration
+
+The site's navigation menu is also dynamically generated from Notion (`NOTION_DB_ID_PAGES`):
+
+```typescript
+// From src/components/Navigation.astro
+const pages = await queryNotionDatabase(
+  import.meta.env.NOTION_DB_ID_PAGES,
+  { sorts: [{ property: 'order', direction: 'ascending' }] }
+);
+```
+
+To add a page to navigation:
+1. Add entry to the `NOTION_DB_ID_PAGES` database
+2. Set the name, path, and order properties
+3. Rebuild your site
+
+## Best Practices
+
+<Accordion title="Use descriptive environment variable names">
+  Name your page IDs clearly:
+  ```bash
+  NOTION_PAGE_ID_ABOUT=xxx
+  NOTION_PAGE_ID_CONTACT=xxx
+  NOTION_PAGE_ID_PORTFOLIO=xxx
+  ```
+  This makes it easy to understand which page is which.
+</Accordion>
+
+<Accordion title="Keep pages focused">
+  Static pages work best for:
+  - Landing pages (homepage, about)
+  - Policy pages (privacy, terms)
+  - Long-form content pages
+  
+  Use collections (blog/projects) for repeated content types.
+</Accordion>
+
+<Accordion title="Cache-bust on deploy">
+  Since content is fetched at build time, make sure your deployment triggers a fresh build when you want updates to go live.
+</Accordion>
+
+<Accordion title="Structure with headings">
+  Use Notion's heading blocks (H1, H2, H3) to create clear content structure. This helps with SEO and makes content easier to navigate.
+</Accordion>
+
+## Troubleshooting
+
+### Page content not updating
+
+**Check:**
+- You've triggered a rebuild after editing the Notion page
+- The page ID in your environment variables is correct
+- Your Notion integration still has access to the page
+
+### Build fails when fetching page
+
+**Check:**
+- Page ID is correct (32 characters, no dashes)
+- Environment variable is set and accessible
+- Notion integration has access to the page
+- Notion API is accessible (check Notion status page)
+
+### Content rendering incorrectly
+
+**Check:**
+- You're using `set:html` to render the parsed content
+- The content is wrapped in an element with proper styling (e.g., `prose` class)
+- Block types are supported (see [Notion Blocks](/content/notion-blocks))
+
+## When to Use Static Pages vs Collections
+
+Choose **static pages** when:
+- Content is unique (homepage, about, contact)
+- You need full control over the page structure
+- Content doesn't follow a repeating template
+
+Choose **collections** (blog/projects) when:
+- You have multiple similar items (blog posts, projects)
+- Content follows a consistent template
+- You want to query, filter, and sort items
+- You need pagination or category pages

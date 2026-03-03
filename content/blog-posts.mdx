@@ -1,0 +1,184 @@
+---
+title: Managing Blog Posts
+description: Create and manage blog posts using Notion as your CMS
+---
+
+Blog posts are managed through a Notion database and automatically synced to your Astro site during the build process.
+
+## Overview
+
+Blog posts are stored in a Notion database (`NOTION_BLOG_DB_ID`) and synced as MDX files to `src/content/blog/` during the pre-build process. Only posts marked as "public" are synced and published to your site.
+
+## Database Schema
+
+Your Notion blog database must include these properties (defined in `src/content.config.ts:15-23`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| **title** | Title | Post title (required) |
+| **description** | Text | SEO meta description |
+| **path** | Text | URL slug (e.g., `/blog/my-post`) |
+| **published** | Date | Publication date |
+| **tags** | Text | Comma-separated tags |
+| **public** | Checkbox | Visibility toggle (only `true` posts sync) |
+| **dates** | Text | Optional date range for the content |
+| **lastEditedTime** | Last edited time | Auto-updated by Notion |
+
+<Note>
+The `public` checkbox must be enabled for a post to be synced and published. This allows you to draft posts in Notion without publishing them immediately.
+</Note>
+
+## Creating a Blog Post
+
+<Steps>
+  <Step title="Add a new page to your Notion blog database">
+    Create a new entry in your Notion database (the one specified by `NOTION_BLOG_DB_ID` in your environment variables).
+  </Step>
+  
+  <Step title="Fill in the required properties">
+    Set the following properties:
+    - **title**: Your post title
+    - **description**: A brief description for SEO
+    - **path**: URL slug (e.g., `/blog/my-first-post`)
+    - **published**: Publication date
+    - **tags**: Categories or tags (comma-separated)
+    - **public**: Check this box when ready to publish
+  </Step>
+  
+  <Step title="Write your content">
+    Write your blog post content using Notion's block editor. See [Notion Blocks](/content/notion-blocks) for supported block types.
+  </Step>
+  
+  <Step title="Trigger a rebuild">
+    Run `pnpm dev` (for local development) or `pnpm build` (for deployment). The pre-build script automatically syncs your Notion content.
+    
+    ```bash
+    pnpm dev
+    ```
+  </Step>
+</Steps>
+
+## Content Sync Process
+
+The sync process happens automatically during the build (`src/lib/notion-download.ts:30-92`):
+
+1. **Query**: Fetches all pages from your blog database where `public: true`
+2. **Filter**: Only syncs posts that have been edited since last sync (using `lastEditedTime`)
+3. **Parse**: Converts Notion blocks to Markdown using `parseBlocks()`
+4. **Assets**: Downloads images and media to `src/assets/` or `public/assets/`
+5. **Generate**: Creates MDX file at `src/content/blog/{page-id}.mdx` with YAML frontmatter
+
+<Note>
+The sync is **incremental** - only posts that have been edited since the last build are re-downloaded. This speeds up build times significantly.
+</Note>
+
+## Generated MDX Structure
+
+When a blog post is synced, it generates an MDX file like this:
+
+```mdx
+---
+lastEditedTime: '2025-03-14T05:31:00.000Z'
+published: '2022-11-27'
+description: 'Post about building this website'
+path: '/blog/here'
+tags: 'dev'
+public: 'true'
+slug: 'here'
+title: 'This website'
+---
+import { Image } from 'astro:assets';
+
+This is the content of your blog post...
+```
+
+## Accessing Blog Posts in Code
+
+Use Astro's content collections API to query blog posts:
+
+```typescript
+import { getCollection } from 'astro:content';
+
+// Get all blog posts
+const posts = await getCollection('blog');
+
+// Filter by tag
+const devPosts = posts.filter(post => 
+  post.data.tags.includes('dev')
+);
+
+// Sort by publication date
+const sortedPosts = posts.sort((a, b) => 
+  new Date(b.data.published) - new Date(a.data.published)
+);
+```
+
+## Updating a Blog Post
+
+<Steps>
+  <Step title="Edit the post in Notion">
+    Make your changes to the Notion page content or properties.
+  </Step>
+  
+  <Step title="Rebuild your site">
+    The sync script automatically detects the updated `lastEditedTime` and re-downloads only the changed post.
+    
+    ```bash
+    pnpm build
+    ```
+  </Step>
+</Steps>
+
+## Unpublishing a Post
+
+To remove a post from your site without deleting it from Notion:
+
+1. Uncheck the **public** checkbox in Notion
+2. Delete the corresponding MDX file from `src/content/blog/`
+3. Rebuild your site
+
+The post will no longer appear on your site but remains in your Notion database for future use.
+
+## Best Practices
+
+<Accordion title="Use descriptive path slugs">
+  Choose clear, SEO-friendly URL paths like `/blog/notion-cms-setup` instead of `/blog/post1`.
+</Accordion>
+
+<Accordion title="Write quality descriptions">
+  The `description` field is used for SEO meta tags. Write compelling 150-160 character summaries.
+</Accordion>
+
+<Accordion title="Tag consistently">
+  Use a consistent tagging system (e.g., "dev", "design", "writing") to make filtering and categorization easier.
+</Accordion>
+
+<Accordion title="Preview before publishing">
+  Keep the `public` checkbox unchecked while drafting. Enable it only when you're ready to publish.
+</Accordion>
+
+## Troubleshooting
+
+### Post not showing up after sync
+
+**Check:**
+- `public` checkbox is enabled in Notion
+- `NOTION_BLOG_DB_ID` environment variable is correct
+- Notion integration has access to the database
+- MDX file exists in `src/content/blog/`
+
+### Build fails with schema errors
+
+**Check:**
+- All required properties (title, description, path, etc.) are filled in Notion
+- Property types match the schema in `src/content.config.ts`
+- No special characters in property values that might break YAML parsing
+
+### Images not loading
+
+**Check:**
+- Images are properly embedded in Notion (not just linked)
+- Image files exist in `src/assets/` or `public/assets/`
+- Image paths in MDX use correct syntax
+
+See the [Notion Blocks](/content/notion-blocks) page for more details on image handling.

@@ -1,0 +1,291 @@
+---
+title: Vercel deployment
+description: Deploy your Astro website to Vercel with automatic builds and preview deployments
+---
+
+This website is deployed on Vercel, which provides automatic deployments from your GitHub repository with zero configuration needed for Astro projects.
+
+## Configuration
+
+The project includes a `vercel.json` configuration file:
+
+```json vercel.json
+{
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "max-age=15552000, public, immutable"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Configuration Options
+
+<ParamField path="cleanUrls" type="boolean" default="true">
+  Removes `.html` extensions from URLs. For example, `/blog.html` becomes `/blog`.
+</ParamField>
+
+<ParamField path="headers" type="array">
+  Custom HTTP headers for specific routes. Used here to cache fonts for 180 days.
+</ParamField>
+
+## Deployment Process
+
+<Steps>
+  <Step title="Connect Repository">
+    Connect your GitHub repository to Vercel:
+    
+    1. Go to [vercel.com](https://vercel.com)
+    2. Click "Add New" → "Project"
+    3. Import your `website-astro` repository
+    4. Vercel auto-detects Astro framework
+  </Step>
+  
+  <Step title="Configure Environment Variables">
+    Add all required environment variables in the Vercel dashboard:
+    
+    **Project Settings** → **Environment Variables**
+    
+    Required variables:
+    - `NOTION_TOKEN`
+    - `NOTION_BLOG_DB_ID`
+    - `NOTION_PROJECTS_DB_ID`
+    - All other `NOTION_PAGE_ID_*` and `NOTION_DB_ID_*` variables
+    
+    <Note>
+      Environment variables are encrypted and securely stored. They're available during build time for the Notion sync process.
+    </Note>
+  </Step>
+  
+  <Step title="Configure Build Settings">
+    Vercel automatically detects the correct settings:
+    
+    - **Framework**: Astro
+    - **Build Command**: `pnpm build`
+    - **Output Directory**: `dist`
+    - **Install Command**: `pnpm install`
+    
+    <Info>
+      The `prebuild` script in package.json runs automatically before the build, syncing content from Notion.
+    </Info>
+  </Step>
+  
+  <Step title="Deploy">
+    Click "Deploy" and Vercel will:
+    
+    1. Install dependencies with pnpm
+    2. Run the prebuild script (Notion sync)
+    3. Build the static site
+    4. Deploy to global edge network
+    5. Assign a production URL
+  </Step>
+</Steps>
+
+## Deployment Types
+
+<Tabs>
+  <Tab title="Production">
+    Production deployments occur automatically when you push to the `main` branch:
+    
+    ```bash
+    git push origin main
+    ```
+    
+    **Features:**
+    - Deployed to production domain
+    - Full Notion content sync
+    - Automatic cache invalidation
+    - SSL certificate
+    - Global CDN distribution
+  </Tab>
+  
+  <Tab title="Preview">
+    Preview deployments are created for:
+    - Pull requests
+    - Non-main branch pushes
+    
+    **Features:**
+    - Unique preview URL
+    - Full build with all features
+    - Automatic comments on PRs
+    - Isolated environment
+    
+    ```bash
+    git checkout -b feature/new-content
+    git push origin feature/new-content
+    ```
+  </Tab>
+</Tabs>
+
+## Build Time
+
+<CardGroup cols={2}>
+  <Card title="Initial Build" icon="clock">
+    **3-5 minutes**
+    
+    - Install dependencies: ~1-2 min
+    - Notion sync: ~30-60 sec
+    - Astro build: ~1-2 min
+    - Deploy: ~30 sec
+  </Card>
+  
+  <Card title="Incremental Build" icon="bolt">
+    **2-3 minutes**
+    
+    - Cached dependencies: ~30 sec
+    - Incremental sync: ~10-20 sec
+    - Astro build: ~1-2 min
+    - Deploy: ~30 sec
+  </Card>
+</CardGroup>
+
+## Environment-Specific Behavior
+
+```typescript
+// Notion sync only runs at build time
+if (import.meta.env.NODE_ENV === 'production') {
+  // All data is pre-fetched and static
+  // No runtime API calls to Notion
+}
+```
+
+<Note>
+  The website makes **zero runtime API calls** to Notion. All content is fetched at build time and served as static HTML.
+</Note>
+
+## Triggering Rebuilds
+
+To update content from Notion:
+
+<Accordion title="Method 1: Manual Deploy">
+  In the Vercel dashboard:
+  
+  1. Go to **Deployments**
+  2. Click the three dots on any deployment
+  3. Select **Redeploy**
+  
+  This re-runs the full build process, syncing fresh content from Notion.
+</Accordion>
+
+<Accordion title="Method 2: Deploy Hook">
+  Create a Deploy Hook for automated rebuilds:
+  
+  1. Go to **Project Settings** → **Git**
+  2. Scroll to **Deploy Hooks**
+  3. Create a hook named "Notion Content Update"
+  4. Copy the webhook URL
+  
+  Trigger rebuilds programmatically:
+  
+  ```bash
+  curl -X POST https://api.vercel.com/v1/integrations/deploy/...
+  ```
+</Accordion>
+
+<Accordion title="Method 3: Git Push">
+  Make any commit to the main branch:
+  
+  ```bash
+  git commit --allow-empty -m "Trigger rebuild"
+  git push origin main
+  ```
+</Accordion>
+
+## Performance Optimizations
+
+Vercel automatically applies:
+
+- **Edge caching**: Static assets cached globally
+- **Brotli compression**: Smaller transfer sizes
+- **HTTP/3 support**: Faster connections
+- **Image optimization**: Automatic WebP/AVIF conversion (via Astro)
+- **Smart CDN**: Content served from nearest edge location
+
+### Custom Font Caching
+
+Fonts are cached for 180 days (configured in `vercel.json`):
+
+```
+Cache-Control: max-age=15552000, public, immutable
+```
+
+This means variable fonts (Inter, Newsreader) load instantly on repeat visits.
+
+## Monitoring
+
+### Analytics
+
+Vercel provides built-in analytics:
+
+- Page views and unique visitors
+- Top pages and referrers
+- Core Web Vitals (LCP, FID, CLS)
+- Geographic distribution
+
+### Build Logs
+
+Access detailed build logs in the dashboard:
+
+1. Go to **Deployments**
+2. Click any deployment
+3. View **Build Logs** tab
+
+Logs include:
+- Notion sync output
+- Build warnings/errors
+- Deployment status
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails with 'NOTION_TOKEN is not defined'">
+    **Solution**: Add environment variables in Vercel dashboard.
+    
+    Go to **Project Settings** → **Environment Variables** and add all required Notion variables.
+  </Accordion>
+  
+  <Accordion title="Content not updating after Notion changes">
+    **Solution**: Trigger a manual redeploy.
+    
+    Changes in Notion only appear after a rebuild. Use any of the three rebuild methods above.
+  </Accordion>
+  
+  <Accordion title="Build times are slow">
+    **Solution**: Check Notion sync performance.
+    
+    Review build logs to see how long the Notion sync takes. If it's slow:
+    
+    - Check if you have many unchanged posts (should use incremental sync)
+    - Verify Notion API response times
+    - Consider reducing the number of posts/projects
+  </Accordion>
+  
+  <Accordion title="Images not loading">
+    **Solution**: Verify image paths and Notion downloads.
+    
+    Images from Notion are downloaded to `public/` during build. Check:
+    
+    - Build logs for asset download errors
+    - Image URLs in generated MDX files
+    - Public directory in deployment
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build Process" href="/deployment/build-process" icon="gear">
+    Learn about the full build pipeline
+  </Card>
+  
+  <Card title="Local Setup" href="/development/local-setup" icon="laptop-code">
+    Set up local development environment
+  </Card>
+</CardGroup>

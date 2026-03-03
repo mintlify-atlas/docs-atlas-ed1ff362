@@ -1,0 +1,483 @@
+---
+title: Environment Setup
+description: Configure Notion integration, environment variables, and database connections
+---
+
+# Environment Setup
+
+This guide walks you through setting up Notion as your CMS and configuring all required environment variables.
+
+## Notion Integration Setup
+
+The site uses Notion as a headless CMS. You'll need to create a Notion integration and set up databases.
+
+<Steps>
+  <Step title="Create Notion Integration">
+    1. Go to [https://www.notion.so/my-integrations](https://www.notion.so/my-integrations)
+    2. Click **"+ New integration"**
+    3. Give it a name (e.g., "My Personal Website")
+    4. Select the workspace you want to use
+    5. Click **"Submit"**
+    6. Copy the **Internal Integration Token** (starts with `secret_`)
+    
+    <Warning>
+      Keep your integration token secret! Never commit it to version control.
+    </Warning>
+  </Step>
+  
+  <Step title="Create Notion Databases">
+    You need at least two databases to get started:
+    
+    **Blog Database**
+    - Create a new database in Notion
+    - Add these properties:
+      - `title` (Title) - Post title
+      - `public` (Checkbox) - Whether to publish
+      - `published` (Date) - Publication date
+      - `description` (Text) - SEO description
+      - `path` (Text) - URL slug
+      - `tags` (Text) - Comma-separated tags
+    
+    **Projects Database**
+    - Create another database
+    - Add the same properties as blog, plus:
+      - `dates` (Text) - Project date range (e.g., "2024-2025")
+    
+    <Info>
+      The exact property names matter! The sync script looks for these specific fields.
+    </Info>
+  </Step>
+  
+  <Step title="Share Databases with Integration">
+    For each database you created:
+    1. Open the database in Notion
+    2. Click the **"⋯"** menu in the top-right
+    3. Select **"Add connections"**
+    4. Choose your integration from the list
+    5. Click **"Confirm"**
+    
+    Your integration now has access to read and write this database.
+  </Step>
+  
+  <Step title="Get Database IDs">
+    To get a database ID:
+    1. Open the database as a full page
+    2. Look at the URL: `https://notion.so/{workspace}/{database_id}?v=...`
+    3. The database ID is the 32-character string (with hyphens removed, it's exactly 32 chars)
+    
+    Example URL:
+    ```
+    https://www.notion.so/myworkspace/a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6?v=...
+    ```
+    Database ID: `a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`
+  </Step>
+</Steps>
+
+## Environment Variables
+
+Create a `.env` file in the project root with the following variables:
+
+### Required Variables
+
+These are **essential** for the site to build:
+
+```env
+# Notion API Authentication
+NOTION_TOKEN=secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Content Databases
+NOTION_BLOG_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PROJECTS_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+<CodeGroup>
+```env Minimal Setup
+# This is the absolute minimum to get started
+NOTION_TOKEN=secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_BLOG_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PROJECTS_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+```env Full Configuration
+# Complete environment variables from the production site
+
+# Notion API
+NOTION_TOKEN=secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Notion Databases
+NOTION_BLOG_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PROJECTS_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Notion Pages (for static content)
+NOTION_PAGE_ID_HOME=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_HOME_INGR=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_HOME_ALLE=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_BLOG=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_READ=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_PAGE_ID_PLACES=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Additional Databases
+NOTION_DB_ID_PAGES=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx        # Navigation items
+NOTION_DB_ID_PLACES=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx       # Map locations
+NOTION_DB_ID_KNOWLEDGE_2024=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_DB_ID_KNOWLEDGE_2025=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTION_DB_ID_KNOWLEDGE_2026=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+</CodeGroup>
+
+### Variable Descriptions
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `NOTION_TOKEN` | Notion integration secret token | Yes |
+| `NOTION_BLOG_DB_ID` | Database containing blog posts | Yes |
+| `NOTION_PROJECTS_DB_ID` | Database containing projects | Yes |
+| `NOTION_PAGE_ID_HOME` | Home page content | Optional |
+| `NOTION_PAGE_ID_BLOG` | Blog overview page | Optional |
+| `NOTION_PAGE_ID_READ` | Reading log page | Optional |
+| `NOTION_PAGE_ID_PLACES` | Places/map page | Optional |
+| `NOTION_DB_ID_PAGES` | Navigation menu items | Optional |
+| `NOTION_DB_ID_PLACES` | Map location data | Optional |
+| `NOTION_DB_ID_KNOWLEDGE_*` | Knowledge base by year | Optional |
+
+<Note>
+  Optional variables are used for additional features. The site will build without them, but some pages may be missing content.
+</Note>
+
+## How Environment Variables Are Used
+
+The Notion client is initialized using your token:
+
+```typescript
+// src/lib/notion-client.ts
+import { Client } from "@notionhq/client";
+import "dotenv/config";
+
+const notion = new Client({
+  auth: process.env.NOTION_TOKEN,
+});
+
+export default notion;
+```
+
+The sync script reads database IDs from environment variables:
+
+```typescript
+// src/lib/notion-download.ts (simplified)
+export async function downloadPostsAsMdx(collection: "projects" | "blog") {
+  let databaseId: string;
+
+  if (collection === "projects") {
+    databaseId = import.meta.env.NOTION_PROJECTS_DB_ID;
+  } else if (collection === "blog") {
+    databaseId = import.meta.env.NOTION_BLOG_DB_ID;
+  }
+
+  const posts = await queryNotionDatabase(databaseId, {
+    filter: {
+      property: "public",
+      checkbox: { equals: true },
+    },
+  });
+  
+  // Download and convert to MDX...
+}
+```
+
+<Info>
+  The `import.meta.env` prefix is Astro's way of accessing environment variables at build time.
+</Info>
+
+## Database Schema Reference
+
+Here's the exact schema used by the content sync:
+
+### Blog Schema
+
+```typescript
+// src/content.config.ts
+const blogSchema = z.object({
+  lastEditedTime: z.string().transform((str) => new Date(str)),
+  published: z.string(),        // "2024-03-15"
+  description: z.string(),      // "Post description for SEO"
+  path: z.string(),            // "my-blog-post"
+  tags: z.string(),            // "astro,notion,cms"
+  public: z.string(),          // "true" (from Notion checkbox)
+  title: z.string(),           // "My Blog Post Title"
+});
+```
+
+### Projects Schema
+
+```typescript
+// src/content.config.ts
+const projectSchema = z.object({
+  lastEditedTime: z.string().transform((str) => new Date(str)),
+  published: z.string(),
+  description: z.string(),
+  path: z.string(),
+  dates: z.string(),           // "2024-2025" (project duration)
+  tags: z.string(),
+  public: z.string(),
+  title: z.string(),
+});
+```
+
+<Warning>
+  If your Notion database properties don't match these names exactly, the sync will fail. Double-check property names are lowercase and match the schema.
+</Warning>
+
+## Content Sync Process
+
+Understanding how content flows from Notion to your site:
+
+<Steps>
+  <Step title="Pre-Build Script Runs">
+    When you run `pnpm dev` or `pnpm build`, the `predev` or `prebuild` script executes:
+    
+    ```json
+    // package.json
+    {
+      "scripts": {
+        "predev": "jiti scripts/index.ts",
+        "dev": "astro dev",
+        "prebuild": "jiti scripts/index.ts",
+        "build": "astro build"
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Query Notion Databases">
+    The script queries your databases for pages where `public` is checked:
+    
+    ```typescript
+    const posts = await queryNotionDatabase(databaseId, {
+      filter: {
+        property: "public",
+        checkbox: { equals: true },
+      },
+      sorts: [
+        { property: "published", direction: "descending" }
+      ],
+    });
+    ```
+  </Step>
+  
+  <Step title="Check for Updates">
+    For each page, compare `lastEditedTime` with the local file:
+    
+    ```typescript
+    const shouldUpdate = await shouldUpdateLocalFile(
+      post.last_edited_time,
+      collection,
+      post.id
+    );
+    ```
+    
+    Only pages that changed are re-downloaded.
+  </Step>
+  
+  <Step title="Fetch Blocks and Properties">
+    Download the page content and metadata:
+    
+    ```typescript
+    const postBlocks = await getBlock(post.id);
+    const pageProperties = await getPageProperties(post.id);
+    ```
+  </Step>
+  
+  <Step title="Convert to MDX">
+    Generate MDX with YAML frontmatter:
+    
+    ```mdx
+    ---
+    lastEditedTime: '2024-03-15T10:30:00.000Z'
+    published: '2024-03-15'
+    description: 'My blog post description'
+    path: 'my-blog-post'
+    tags: 'astro,notion'
+    public: 'true'
+    title: 'My Blog Post'
+    ---
+    import { Image } from 'astro:assets';
+
+    # My Blog Post
+
+    Content here...
+    ```
+  </Step>
+  
+  <Step title="Write to Disk">
+    Save the MDX file to `src/content/{collection}/{page-id}.mdx`:
+    
+    ```typescript
+    const dest = path
+      .join("src", "content", collection, post.id)
+      .concat(".mdx");
+
+    await fsPromises.writeFile(dest, postMdx);
+    ```
+  </Step>
+</Steps>
+
+## Notion Block Support
+
+The parser converts these Notion block types to Markdown:
+
+<CardGroup cols={2}>
+  <Card title="Text Blocks" icon="text">
+    - Paragraphs
+    - Headings (H1, H2, H3)
+    - Quotes
+    - Callouts
+  </Card>
+  
+  <Card title="Lists" icon="list">
+    - Bulleted lists
+    - Numbered lists
+    - To-do lists (with checkboxes)
+  </Card>
+  
+  <Card title="Code & Media" icon="code">
+    - Code blocks (with syntax highlighting)
+    - Images (downloaded locally)
+    - Videos
+    - PDFs
+  </Card>
+  
+  <Card title="Advanced" icon="table">
+    - Tables (with headers)
+    - Embeds (YouTube, etc.)
+    - Toggles
+    - Dividers
+  </Card>
+</CardGroup>
+
+### Rich Text Formatting
+
+Supported Notion annotations:
+- **Bold**, *italic*, ~~strikethrough~~, underline
+- `Inline code`
+- [Links](https://example.com)
+- <span style="color: orange">Colors</span> (converted to Tailwind classes)
+
+## Testing Your Setup
+
+<Steps>
+  <Step title="Create Test Content">
+    In your Notion blog database:
+    1. Create a new page
+    2. Set title to "Test Post"
+    3. Add some content (headings, paragraphs, lists)
+    4. Fill in required properties (published, description, path, tags)
+    5. Check the `public` checkbox
+  </Step>
+  
+  <Step title="Sync Content">
+    Run the development server:
+    
+    ```bash
+    pnpm dev
+    ```
+    
+    Watch the console for:
+    ```
+    Writing to file: src/content/blog/abc123def456.mdx
+    Finished downloading content.
+    ```
+  </Step>
+  
+  <Step title="Verify MDX File">
+    Check that the file was created:
+    
+    ```bash
+    cat src/content/blog/*.mdx
+    ```
+    
+    You should see your content with frontmatter.
+  </Step>
+  
+  <Step title="View in Browser">
+    Navigate to the blog listing page to see your post appear.
+  </Step>
+</Steps>
+
+## Deployment Environment Variables
+
+When deploying to Vercel (or another platform):
+
+<Steps>
+  <Step title="Add to Vercel Dashboard">
+    1. Go to your project settings
+    2. Navigate to **Environment Variables**
+    3. Add each variable from your `.env` file
+    4. Set environment to **Production**, **Preview**, and **Development**
+  </Step>
+  
+  <Step title="Trigger Redeploy">
+    After adding variables, trigger a new deployment for changes to take effect.
+  </Step>
+</Steps>
+
+<Warning>
+  **Security:** Never expose your `NOTION_TOKEN` in client-side code. It's only used at build time and never sent to the browser.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Unauthorized (401)">
+    Your `NOTION_TOKEN` is invalid or missing. Double-check:
+    - Token is correct (starts with `secret_`)
+    - `.env` file is in the project root
+    - You're using `process.env.NOTION_TOKEN` (not `import.meta.env` in Node scripts)
+  </Accordion>
+  
+  <Accordion title="Error: Object not found (404)">
+    The database/page ID is wrong, or your integration doesn't have access:
+    - Verify the ID is exactly 32 characters (no hyphens)
+    - Make sure you shared the database with your integration
+    - Check you're using the database ID, not the page ID
+  </Accordion>
+  
+  <Accordion title="Content not syncing">
+    Possible causes:
+    - `public` checkbox is not enabled on the Notion page
+    - Page's `lastEditedTime` hasn't changed (delete local MDX to force re-sync)
+    - Database property names don't match the schema
+  </Accordion>
+  
+  <Accordion title="Schema validation errors">
+    The frontmatter doesn't match the Zod schema in `content.config.ts`:
+    - Ensure all required properties exist in Notion
+    - Check property types (text vs. date vs. checkbox)
+    - Property names are case-sensitive
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+With your environment configured:
+
+<CardGroup cols={2}>
+  <Card title="Add Content" icon="pencil">
+    Start creating blog posts and projects in your Notion databases
+  </Card>
+  
+  <Card title="Customize Schema" icon="file-code">
+    Modify `content.config.ts` to add custom properties
+  </Card>
+  
+  <Card title="Extend Sync Logic" icon="code">
+    Edit `src/lib/notion-download.ts` to customize the sync process
+  </Card>
+  
+  <Card title="Deploy" icon="rocket">
+    Push to GitHub and connect to Vercel for automatic deployments
+  </Card>
+</CardGroup>
+
+<Info>
+  **Pro Tip:** Use Notion templates for blog posts to ensure all required properties are filled in consistently.
+</Info>

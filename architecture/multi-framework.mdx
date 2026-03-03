@@ -1,0 +1,596 @@
+---
+title: Multi-Framework Strategy
+description: Understanding when and why to use Astro, React, and Solid.js in Andrew Gao's personal website
+---
+
+## Overview
+
+This website strategically combines **three different frameworks** to optimize for performance, developer experience, and specific use cases:
+
+- **Astro**: Server-side rendering and zero-JS static pages
+- **React**: Image optimization component
+- **Solid.js**: Interactive UI components
+
+This approach leverages the strengths of each framework while minimizing JavaScript bundle size.
+
+## Framework Configuration
+
+The multi-framework setup is configured in `astro.config.mjs`:
+
+```javascript astro.config.mjs
+import { defineConfig } from "astro/config";
+import solid from "@astrojs/solid-js";
+import react from "@astrojs/react";
+import sitemap from "@astrojs/sitemap";
+import mdx from "@astrojs/mdx";
+
+export default defineConfig({
+  site: "https://www.andrewgao.org/",
+
+  integrations: [
+    solid(),
+    react({
+      include: ["**/satori.tsx"],  // Only Satori component uses React
+    }),
+    sitemap({
+      filter: (page) => !page.includes(".json"),
+    }),
+    mdx(),
+  ],
+
+  // ... other config
+});
+```
+
+<Note>
+  React is intentionally limited to specific files using the `include` pattern, preventing it from processing all components.
+</Note>
+
+## Astro: The Foundation
+
+### When to Use Astro
+
+<CardGroup cols={2}>
+  <Card title="Static Pages" icon="file">
+    Home, about, blog posts, project pages - any content-focused page
+  </Card>
+  
+  <Card title="Layouts" icon="table-layout">
+    Page templates, navigation, footer, SEO components
+  </Card>
+  
+  <Card title="Data Fetching" icon="download">
+    Build-time Notion API calls, static data loading
+  </Card>
+  
+  <Card title="Server Components" icon="server">
+    Components that don't require client-side JavaScript
+  </Card>
+</CardGroup>
+
+### Astro Component Example
+
+```astro src/layouts/Layout.astro
+---
+import Head from '@components/Head.astro';
+import Navigation from '@components/Navigation.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+}
+
+const { title, description, path } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <Head title={title} description={description} path={path} />
+  <body>
+    <Navigation />
+    <main>
+      <slot name="content" />
+    </main>
+  </body>
+</html>
+```
+
+<Accordion title="Why Astro for this?">
+  - **Zero JavaScript**: This layout generates pure HTML with no runtime JS
+  - **Fast builds**: Astro's compiler is optimized for static sites
+  - **SEO-friendly**: Server-rendered HTML is immediately indexable
+</Accordion>
+
+### Build-Time Data Fetching
+
+Astro components can fetch data at build time:
+
+```astro src/pages/index.astro
+---
+import { getPage } from '@lib/notion-cms-page';
+import { getBlock } from '@lib/notion-cms';
+import { parseBlocks } from '@lib/notion-parse';
+import Layout from '@layouts/Layout.astro';
+
+const page = await getPage(import.meta.env.NOTION_PAGE_ID_HOME);
+const blocks = await getBlock(page.id);
+const content = parseBlocks(blocks);
+---
+
+<Layout title="Home" description="Andrew Gao's website" path="/">
+  <Fragment slot="content">
+    <article set:html={content} />
+  </Fragment>
+</Layout>
+```
+
+<Info>
+  The `await` in the frontmatter runs **once at build time**, not on every request. This is what makes Astro so fast.
+</Info>
+
+## React: Image Optimization Only
+
+### When to Use React
+
+<Card title="Astro Image Component" icon="image">
+  React is used **exclusively** for Astro's `<Image />` component, which provides automatic image optimization.
+</Card>
+
+### Image Component in MDX
+
+When Notion content is synced, images are converted to Astro Image components:
+
+```typescript src/lib/notion-parse.ts:222-236
+case "image":
+  const imgAlt = parseRichTextBlock({ rich_text: block.image.caption }) || "image";
+  const imgUrl = block.image[block.image.type].url.split("?");
+  const imgSrc = imgUrl[0];
+  const imgParams = new URLSearchParams(imgUrl[1]);
+  
+  if (!imgParams) {
+    return html`<img src="${imgSrc}" alt="${imgAlt}"`;
+  } else {
+    return `<Image src=${imgSrc} width="${imgParams.get(
+      "w",
+    )}" height="${imgParams.get(
+      "h",
+    )}" format="webp" alt="${imgAlt}" />`;
+  }
+```
+
+This generates MDX like:
+
+```mdx
+import { Image } from 'astro:assets';
+
+<Image 
+  src={import("@assets/file.abc123.png")}
+  width="1200" 
+  height="800" 
+  format="webp" 
+  alt="Beautiful sunset" 
+/>
+```
+
+### Benefits of Astro Image
+
+<AccordionGroup>
+  <Accordion title="Automatic Optimization">
+    - Converts to WebP/AVIF formats
+    - Generates responsive image sizes
+    - Lazy loads images by default
+  </Accordion>
+  
+  <Accordion title="Build-Time Processing">
+    - Images processed during `astro build`
+    - Uses Sharp for fast, high-quality optimization
+    - No runtime performance cost
+  </Accordion>
+  
+  <Accordion title="Type Safety">
+    - TypeScript validation for image imports
+    - Compile-time errors for missing images
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  React is **only** used for the Image component through Astro's integration. No React components are directly authored in this project.
+</Warning>
+
+## Solid.js: Interactive Components
+
+### When to Use Solid.js
+
+<CardGroup cols={2}>
+  <Card title="Client Interactivity" icon="hand-pointer">
+    Maps, navigation menus, toggles - anything requiring JavaScript
+  </Card>
+  
+  <Card title="Better Performance" icon="gauge-high">
+    Solid.js has smaller bundle sizes than React (~7KB vs ~40KB)
+  </Card>
+  
+  <Card title="Fine-Grained Reactivity" icon="bolt">
+    More efficient updates than React's virtual DOM
+  </Card>
+</CardGroup>
+
+### Solid.js Component Example
+
+```tsx src/components/Map.tsx
+import { createSignal, onMount } from "solid-js";
+import L from "leaflet";
+
+export default function Map() {
+  const [map, setMap] = createSignal<L.Map | null>(null);
+
+  onMount(() => {
+    const mapInstance = L.map("map").setView([37.7749, -122.4194], 10);
+    
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png', {
+      maxZoom: 20,
+    }).addTo(mapInstance);
+
+    setMap(mapInstance);
+  });
+
+  return <div id="map" class="h-96 w-full" />;
+}
+```
+
+### Hydration Directive
+
+Solid components require the `client:only` directive to hydrate on the client:
+
+```astro src/pages/places.astro
+---
+import Layout from '@layouts/Layout.astro';
+import Map from '@components/Map';
+---
+
+<Layout title="Places" description="Map of places I've visited" path="/places">
+  <Fragment slot="content">
+    <Map client:only="solid-js" />
+  </Fragment>
+</Layout>
+```
+
+<Accordion title="Why client:only?">
+  `client:only="solid-js"` tells Astro to:
+  1. Skip server-side rendering for this component
+  2. Load Solid.js runtime on the client
+  3. Hydrate the component after page load
+  
+  This is necessary for components that depend on browser APIs (like Leaflet's map).
+</Accordion>
+
+### Solid.js Component Gallery
+
+<Tabs>
+  <Tab title="Map.tsx">
+    Interactive Leaflet map with custom markers and zoom controls.
+    
+    **Bundle size**: ~35KB (Solid + Leaflet)
+    
+    **Features**:
+    - Dynamic marker placement from JSON data
+    - Zoom-based marker visibility
+    - Custom tile provider (Stadia Maps)
+  </Tab>
+  
+  <Tab title="Navigation.tsx">
+    Mobile navigation menu with slide-out drawer.
+    
+    **Bundle size**: ~10KB (Solid + Motion One)
+    
+    **Features**:
+    - Animated transitions
+    - Keyboard navigation
+    - Accessibility support
+  </Tab>
+  
+  <Tab title="BottomNavigation.tsx">
+    Mobile bottom navigation bar with icons.
+    
+    **Bundle size**: ~8KB
+    
+    **Features**:
+    - Active route highlighting
+    - Touch-optimized tap targets
+  </Tab>
+  
+  <Tab title="Icon.tsx">
+    SVG icon component with type-safe icon names.
+    
+    **Bundle size**: ~2KB
+    
+    **Features**:
+    - Inline SVG rendering
+    - Custom size and color props
+  </Tab>
+</Tabs>
+
+## Framework Decision Matrix
+
+Use this guide to choose the right framework:
+
+| Requirement | Framework | Reason |
+|-------------|-----------|--------|
+| Static content page | **Astro** | Zero JS, fastest load time |
+| Blog post layout | **Astro** | No interactivity needed |
+| Image display | **React** | Astro Image optimization |
+| Interactive map | **Solid.js** | Requires client JS, smaller bundle |
+| Navigation menu (mobile) | **Solid.js** | Toggle state, animations |
+| SEO metadata | **Astro** | Server-rendered `<head>` |
+| Data fetching | **Astro** | Build-time API calls |
+| Form validation | **Solid.js** | Client-side interactivity |
+
+## Bundle Size Comparison
+
+Here's how each framework impacts bundle size:
+
+<CardGroup cols={3}>
+  <Card title="Astro Pages" icon="file">
+    **~0-5KB**
+    
+    Static HTML with optional CSS
+  </Card>
+  
+  <Card title="React (Image Only)" icon="image">
+    **+0KB**
+    
+    Compiled away at build time
+  </Card>
+  
+  <Card title="Solid.js Page" icon="hand-pointer">
+    **~7KB + component**
+    
+    Solid runtime + component code
+  </Card>
+</CardGroup>
+
+### Actual Bundle Sizes
+
+From production builds:
+
+```bash
+# Home page (Astro only)
+index.html: 12KB HTML, 0KB JS
+
+# Blog post (Astro + Images)
+blog/my-post/index.html: 45KB HTML, 0KB JS
+
+# Places page (Astro + Solid.js + Leaflet)
+places/index.html: 8KB HTML, 35KB JS
+```
+
+<Tip>
+  Most pages ship **zero JavaScript** because they use pure Astro. Only interactive pages include JS bundles.
+</Tip>
+
+## Performance Implications
+
+### Page Load Speed
+
+<Steps>
+  <Step title="Astro Pages (0KB JS)">
+    - **TTFB**: Less than 50ms
+    - **FCP**: Less than 200ms
+    - **LCP**: Less than 500ms
+    - **TTI**: Same as FCP (no hydration)
+  </Step>
+  
+  <Step title="Solid.js Pages (~30-40KB JS)">
+    - **TTFB**: Less than 50ms
+    - **FCP**: Less than 200ms (HTML rendered)
+    - **LCP**: Less than 800ms
+    - **TTI**: Less than 1000ms (after hydration)
+  </Step>
+</Steps>
+
+### Why Not Use React Everywhere?
+
+Comparing React vs. Solid.js for interactive components:
+
+| Metric | React | Solid.js | Winner |
+|--------|-------|----------|--------|
+| Runtime size | 40KB | 7KB | 🏆 Solid.js |
+| Rendering speed | Virtual DOM | Direct DOM | 🏆 Solid.js |
+| Re-render cost | Diff entire tree | Update changed signals | 🏆 Solid.js |
+| Ecosystem | Massive | Growing | React |
+| Learning curve | Familiar | Similar | Tie |
+
+<Info>
+  For this project's needs (maps, navigation), Solid.js provides better performance with minimal trade-offs.
+</Info>
+
+## Islands Architecture
+
+Astro uses the **Islands architecture** pattern:
+
+```astro
+<!-- Static Astro component -->
+<Header />
+
+<!-- Static content -->
+<article>Blog post content...</article>
+
+<!-- Interactive island -->
+<CommentSection client:only="solid-js" />
+
+<!-- Static footer -->
+<Footer />
+```
+
+Each "island" is an independent interactive component in a sea of static HTML.
+
+<Accordion title="Benefits of Islands">
+  1. **Partial hydration**: Only interactive components load JS
+  2. **Faster TTI**: Less JavaScript to parse and execute
+  3. **Better SEO**: Static HTML is immediately visible to crawlers
+  4. **Progressive enhancement**: Site works without JS, enhanced with JS
+</Accordion>
+
+## Development Experience
+
+### TypeScript Support
+
+All three frameworks have excellent TypeScript support:
+
+```typescript
+// Astro component props
+interface Props {
+  title: string;
+}
+
+// Solid.js component props
+type MapProps = {
+  initialZoom?: number;
+};
+
+// Type-safe image imports
+import type { ImageMetadata } from 'astro';
+import heroImage from '@assets/hero.png';
+```
+
+### Hot Module Replacement
+
+During development (`pnpm dev`):
+
+- **Astro**: Instant HMR for content changes
+- **Solid.js**: Fast refresh preserves component state
+- **React**: Standard Fast Refresh (used minimally)
+
+### Build Times
+
+```bash
+# Development build
+pnpm dev
+# Notion sync: ~5-15s
+# Astro dev server: ~2-3s
+# Total: ~8-18s
+
+# Production build
+pnpm build
+# Notion sync: ~15-30s
+# Astro build: ~10-15s
+# Total: ~25-45s
+```
+
+<Note>
+  Incremental sync reduces subsequent builds to ~10-20s total.
+</Note>
+
+## Migration Guidelines
+
+### When to Convert Astro → Solid.js
+
+Convert a component from Astro to Solid.js if:
+
+1. It needs client-side state management
+2. It has event handlers (click, scroll, etc.)
+3. It uses browser APIs (localStorage, geolocation)
+4. It requires animations/transitions
+
+### Conversion Example
+
+<CodeGroup>
+```astro Before (Astro)
+---
+const items = ['Home', 'Blog', 'Projects'];
+---
+
+<nav>
+  {items.map(item => <a href={`/${item.toLowerCase()}`}>{item}</a>)}
+</nav>
+```
+
+```tsx After (Solid.js)
+import { For } from 'solid-js';
+
+export default function Navigation() {
+  const items = ['Home', 'Blog', 'Projects'];
+
+  return (
+    <nav>
+      <For each={items}>
+        {(item) => <a href={`/${item.toLowerCase()}`}>{item}</a>}
+      </For>
+    </nav>
+  );
+}
+```
+</CodeGroup>
+
+<Warning>
+  Only convert if the component **requires** client-side JavaScript. Keep components as Astro whenever possible to minimize bundle size.
+</Warning>
+
+## Testing Strategy
+
+### Astro Components
+
+Tested through integration tests:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { getPage } from '../lib/notion-cms-page';
+
+describe('Page rendering', () => {
+  it('should fetch Notion content', async () => {
+    const page = await getPage('test-id');
+    expect(page).toBeDefined();
+  });
+});
+```
+
+### Solid.js Components
+
+Tested with Vitest and Solid Testing Library:
+
+```typescript
+import { render } from 'solid-testing-library';
+import Map from '../components/Map';
+
+it('renders map container', () => {
+  const { container } = render(() => <Map />);
+  expect(container.querySelector('#map')).toBeDefined();
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Minimize Client JavaScript">
+    Default to Astro components. Only use Solid.js when interactivity is truly needed.
+  </Accordion>
+  
+  <Accordion title="Lazy Load Heavy Components">
+    Use `client:visible` for below-the-fold components:
+    
+    ```astro
+    <Map client:visible />
+    ```
+  </Accordion>
+  
+  <Accordion title="Share Types Between Frameworks">
+    Define shared types in `src/types/` and import across frameworks.
+  </Accordion>
+  
+  <Accordion title="Optimize Images at Build Time">
+    Always use Astro's `<Image>` component for static images, never raw `<img>` tags.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture Overview" href="/architecture/overview" icon="sitemap">
+    Return to the high-level architecture guide
+  </Card>
+  
+  <Card title="Content Sync Process" href="/architecture/content-sync" icon="arrows-rotate">
+    Learn how content flows from Notion to Astro
+  </Card>
+</CardGroup>

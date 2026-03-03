@@ -1,0 +1,236 @@
+---
+title: Architecture Overview
+description: High-level architecture and design decisions for Andrew Gao's personal website built with Astro and Notion CMS
+---
+
+## System Architecture
+
+Andrew Gao's personal website is a statically generated site built with Astro that uses Notion as a headless CMS. The architecture follows a **pre-build synchronization pattern** where content is fetched from Notion during the build process and converted to local MDX files.
+
+```mermaid
+graph LR
+    A[Notion Databases] --> B[Pre-build Sync]
+    B --> C[Local MDX Files]
+    C --> D[Astro Build]
+    D --> E[Static HTML]
+    E --> F[Vercel CDN]
+```
+
+## Tech Stack
+
+<CardGroup cols={2}>
+  <Card title="Frontend Framework" icon="layer-group">
+    **Astro 5.5.4** - Static site generation with file-based routing
+  </Card>
+  
+  <Card title="CMS" icon="database">
+    **Notion API** - Headless CMS for content management
+  </Card>
+  
+  <Card title="UI Libraries" icon="react">
+    - **React 19** (Image component)
+    - **Solid.js 1.9** (Interactive components)
+  </Card>
+  
+  <Card title="Styling" icon="palette">
+    **Tailwind CSS 4.0** via Vite plugin with Typography plugin
+  </Card>
+</CardGroup>
+
+## Core Design Decisions
+
+### 1. Pre-build Content Synchronization
+
+**Decision**: Fetch and convert Notion content to local MDX files at build time rather than runtime.
+
+**Rationale**:
+- **Performance**: Static generation eliminates API calls during page loads
+- **Reliability**: Site remains functional even if Notion API is down
+- **Cost**: No API rate limit concerns in production
+- **SEO**: Fully static HTML is optimal for search engines
+
+**Implementation**: Located in `src/lib/notion-download.ts:30`
+
+```typescript
+export async function downloadPostsAsMdx(collection: "projects" | "blog") {
+  // Queries Notion database for public posts
+  // Downloads assets locally
+  // Writes MDX files with frontmatter
+}
+```
+
+### 2. Multi-Framework Strategy
+
+The project uses three different frameworks strategically:
+
+<AccordionGroup>
+  <Accordion title="Astro - Server-side rendering">
+    Used for layouts, static pages, and server-side data fetching. Provides zero JavaScript by default.
+  </Accordion>
+  
+  <Accordion title="React - Image optimization">
+    Used specifically for Astro's `<Image />` component which provides automatic image optimization.
+    
+    Configured in `astro.config.mjs:18-20` to only include the Satori component.
+  </Accordion>
+  
+  <Accordion title="Solid.js - Interactive components">
+    Used for client-side interactivity (Map, Navigation) with smaller bundle sizes than React.
+    
+    Components use `client:only="solid-js"` directive for hydration.
+  </Accordion>
+</AccordionGroup>
+
+### 3. Incremental Content Updates
+
+The sync process implements smart caching to avoid unnecessary re-downloads:
+
+```typescript
+// src/lib/notion-download.ts:94-130
+async function shouldUpdateLocalFile(
+  serverLastEditedTime: string,
+  srcContentPath: string,
+  postId: string
+): Promise<boolean> {
+  // Reads lastEditedTime from local MDX frontmatter
+  // Compares with server timestamp
+  // Returns true only if content has changed
+}
+```
+
+<Note>
+  This optimization significantly reduces build times by only syncing modified content.
+</Note>
+
+### 4. Type-Safe Notion Integration
+
+All Notion API responses are typed using official SDK types:
+
+```typescript
+import type {
+  BlockObjectResponse,
+  PageObjectResponse
+} from '@notionhq/client/build/src/api-endpoints';
+```
+
+Type guards ensure runtime safety throughout the parsing pipeline (`src/lib/notion-cms.ts:23-25`).
+
+## Project Structure
+
+<CodeGroup>
+```bash Core Directories
+src/
+├── components/     # Astro, React, and Solid.js components
+├── content/       # Auto-generated MDX from Notion
+├── layouts/       # Page layout templates
+├── lib/          # Notion integration & utilities
+├── pages/        # File-based routing
+└── styles/       # Global CSS and Tailwind config
+```
+
+```bash Notion Integration
+src/lib/
+├── notion-client.ts      # API client singleton
+├── notion-cms.ts         # Database/block querying
+├── notion-parse.ts       # Block → Markdown converter
+├── notion-cms-page.ts    # Page property extraction
+├── notion-cms-asset.ts   # Media file downloads
+└── notion-download.ts    # Pre-build sync orchestration
+```
+</CodeGroup>
+
+## Build Process
+
+The build follows this sequence:
+
+<Steps>
+  <Step title="Pre-build Hook">
+    `jiti scripts/index.ts` runs before `astro dev` or `astro build`
+    
+    Configured in `package.json` as `predev` and `prebuild` scripts.
+  </Step>
+  
+  <Step title="Content Sync">
+    - Downloads blog posts from `NOTION_BLOG_DB_ID`
+    - Downloads projects from `NOTION_PROJECTS_DB_ID`
+    - Converts Notion blocks to Markdown
+    - Downloads and optimizes assets
+    - Writes MDX files to `src/content/`
+  </Step>
+  
+  <Step title="Astro Build">
+    - Processes MDX content collections
+    - Generates static pages
+    - Optimizes images with Sharp
+    - Creates sitemap
+  </Step>
+  
+  <Step title="Deployment">
+    - Outputs to `dist/` directory
+    - Vercel deploys to CDN
+  </Step>
+</Steps>
+
+## Environment Variables
+
+The system requires these Notion credentials:
+
+<ParamField path="NOTION_TOKEN" type="string" required>
+  Notion API integration token from https://www.notion.so/my-integrations
+</ParamField>
+
+<ParamField path="NOTION_BLOG_DB_ID" type="string" required>
+  Database ID for blog posts
+</ParamField>
+
+<ParamField path="NOTION_PROJECTS_DB_ID" type="string" required>
+  Database ID for project entries
+</ParamField>
+
+<ParamField path="NOTION_DB_ID_PAGES" type="string">
+  Database for dynamic navigation items
+</ParamField>
+
+<ParamField path="NOTION_DB_ID_PLACES" type="string">
+  Database for places/map visualization
+</ParamField>
+
+<ParamField path="NOTION_DB_ID_KNOWLEDGE_*" type="string">
+  Databases for yearly knowledge entries (2024, 2025, 2026)
+</ParamField>
+
+## Performance Characteristics
+
+<CardGroup cols={3}>
+  <Card title="Build Time" icon="clock">
+    - Initial: ~30-60s (full sync)
+    - Incremental: ~10-20s (changed content only)
+  </Card>
+  
+  <Card title="Page Load" icon="gauge-high">
+    - Static HTML: Less than 50ms TTFB
+    - Zero runtime API calls
+    - Optimized images (WebP)
+  </Card>
+  
+  <Card title="Bundle Size" icon="box">
+    - Base: ~50KB (Astro + Tailwind)
+    - Interactive pages: +30KB (Solid.js)
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Notion CMS Integration" href="/architecture/notion-cms" icon="database">
+    Learn how Notion databases are structured and queried
+  </Card>
+  
+  <Card title="Content Sync Process" href="/architecture/content-sync" icon="arrows-rotate">
+    Deep dive into the pre-build synchronization pipeline
+  </Card>
+  
+  <Card title="Multi-Framework Strategy" href="/architecture/multi-framework" icon="layer-group">
+    Understand when to use Astro, React, or Solid.js
+  </Card>
+</CardGroup>

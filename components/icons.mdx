@@ -1,0 +1,304 @@
+---
+title: Icon Component
+description: SVG icon component with Phosphor Icons integration
+---
+
+# Icon Component
+
+The Icon component provides a type-safe way to render SVG icons from the Phosphor Icons library. Built with Solid.js, it supports a curated set of icons used throughout the website.
+
+## Location
+
+`~/workspace/source/src/components/Icon.tsx`
+
+## Props
+
+<ParamField path="iconName" type="'home' | 'project' | 'about' | 'gao' | 'menu' | 'close'" required>
+  Name of the icon to render. Type-safe string literal union.
+</ParamField>
+
+<ParamField path="strokeWidth" type="number" default="16">
+  Width of the SVG stroke in pixels
+</ParamField>
+
+<ParamField path="strokeLinecap" type="'butt' | 'round' | 'square' | 'inherit'" default="'round'">
+  SVG stroke linecap style
+</ParamField>
+
+<ParamField path="strokeLinejoin" type="'arcs' | 'bevel' | 'miter' | 'miter-clip' | 'round' | 'inherit'" default="'round'">
+  SVG stroke linejoin style
+</ParamField>
+
+<ParamField path="className" type="string" default="'h-6 w-6'">
+  Tailwind CSS classes for sizing and styling
+</ParamField>
+
+<ParamField path="children" type="JSX.Element">
+  Additional SVG elements to render inside the icon (rarely used)
+</ParamField>
+
+## TypeScript Interface
+
+```typescript
+interface IconProps {
+  iconName: "home" | "project" | "about" | "gao" | "menu" | "close";
+  strokeWidth?: number;
+  strokeLinecap?: "butt" | "round" | "square" | "inherit";
+  strokeLinejoin?: "arcs" | "bevel" | "miter" | "miter-clip" | "round" | "inherit";
+  className?: string;
+  children?: JSX.Element;
+}
+```
+
+See `~/workspace/source/src/components/Icon.tsx:4-17`.
+
+## Available Icons
+
+### home
+
+House icon for home/homepage navigation.
+
+```tsx
+<Icon iconName="home" className="w-6 h-6" />
+```
+
+SVG path:
+```svg
+<path d="M152,208V160a8,8,0,0,0-8-8H112a8,8,0,0,0-8,8v48a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V115.5a8.3,8.3,0,0,1,2.6-5.9l80-72.7a8,8,0,0,1,10.8,0l80,72.7a8.3,8.3,0,0,1,2.6,5.9V208a8,8,0,0,1-8,8H160A8,8,0,0,1,152,208Z" />
+```
+
+See `~/workspace/source/src/components/Icon.tsx:57-63`.
+
+### project
+
+Document/file icon for projects section.
+
+```tsx
+<Icon iconName="project" className="w-6 h-6" />
+```
+
+SVG paths:
+```svg
+<path d="M200,224H56a8,8,0,0,1-8-8V40a8,8,0,0,1,8-8h96l56,56V216A8,8,0,0,1,200,224Z"></path>
+<polyline points="152 32 152 88 208 88"></polyline>
+<line x1="96" y1="136" x2="160" y2="136"></line>
+<line x1="96" y1="168" x2="160" y2="168"></line>
+```
+
+See `~/workspace/source/src/components/Icon.tsx:66-74`.
+
+### about
+
+User profile icon for about/bio section.
+
+```tsx
+<Icon iconName="about" className="w-6 h-6" />
+```
+
+SVG paths:
+```svg
+<circle cx="128" cy="96" r="64" fill="none"></circle>
+<path d="M31,216a112,112,0,0,1,194,0" fill="none"></path>
+```
+
+See `~/workspace/source/src/components/Icon.tsx:78-84`.
+
+### menu
+
+Hamburger menu icon for mobile navigation.
+
+```tsx
+<Icon iconName="menu" className="w-6 h-6" />
+```
+
+SVG lines:
+```svg
+<line x1="40" y1="128" x2="216" y2="128"></line>
+<line x1="40" y1="64" x2="216" y2="64"></line>
+<line x1="40" y1="192" x2="216" y2="192"></line>
+```
+
+See `~/workspace/source/src/components/Icon.tsx:88-95`.
+
+### close
+
+X/close icon for dismissing menus or modals.
+
+```tsx
+<Icon iconName="close" className="w-6 h-6" />
+```
+
+SVG lines:
+```svg
+<line x1="200" y1="56" x2="56" y2="200"></line>
+<line x1="200" y1="200" x2="56" y2="56"></line>
+```
+
+See `~/workspace/source/src/components/Icon.tsx:99-105`.
+
+## Usage Examples
+
+### Basic Usage
+
+```tsx
+import { Icon } from '@components/Icon';
+
+<Icon iconName="home" />
+```
+
+### Custom Size
+
+```tsx
+<Icon iconName="project" className="w-8 h-8" />
+```
+
+### Custom Stroke
+
+```tsx
+<Icon 
+  iconName="menu" 
+  strokeWidth={20}
+  className="w-6 h-6 text-blue-500"
+/>
+```
+
+### In Navigation Component
+
+```tsx
+<label class="px-5 py-3" for="nav-menu-state">
+  <Icon
+    iconName="menu"
+    className={clsx("h-6 w-6", checked() && "hidden")}
+  />
+  <Icon
+    iconName="close"
+    className={clsx("h-6 w-6", checked() ? "block" : "hidden")}
+  />
+</label>
+```
+
+See `~/workspace/source/src/components/Navigation.tsx:123-135` for this usage.
+
+### Conditional Rendering
+
+```tsx
+<Icon 
+  iconName={isOpen ? "close" : "menu"}
+  className="w-6 h-6"
+/>
+```
+
+## Implementation Details
+
+### Base SVG Component
+
+All icons use a shared `Svg` wrapper component:
+
+```typescript
+const Svg: Component<IconProps> = (props) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 256 256"
+      class={clsx(props.className ?? "h-6 w-6")}
+      stroke-width={props.strokeWidth ?? 16}
+      stroke-linecap={props.strokeLinecap ?? "round"}
+      stroke-linejoin={props.strokeLinejoin ?? "round"}
+      stroke="#000000"
+      fill="none"
+    >
+      {props.children}
+    </svg>
+  );
+};
+```
+
+See `~/workspace/source/src/components/Icon.tsx:40-54`.
+
+### Icon Selection
+
+The main `Icon` component uses a switch statement for type-safe icon selection:
+
+```typescript
+const Icon: Component<IconProps> = (props) => {
+  switch (props.iconName) {
+    case "home":
+      return <HomeIcon {...props} />;
+    case "project":
+      return <ProjectIcon {...props} />;
+    case "about":
+      return <AboutIcon {...props} />;
+    case "menu":
+      return <MenuIcon {...props} />;
+    case "close":
+      return <CloseIcon {...props} />;
+  }
+};
+```
+
+See `~/workspace/source/src/components/Icon.tsx:25-37`.
+
+## Adding New Icons
+
+To add a new icon:
+
+1. Find the icon SVG from [Phosphor Icons](https://phosphoricons.com/)
+2. Add the icon name to the `iconName` type union:
+   ```typescript
+   iconName: "home" | "project" | "about" | "gao" | "menu" | "close" | "newIcon"
+   ```
+3. Create a new icon component:
+   ```typescript
+   const NewIcon: Component<IconProps> = (props) => {
+     return (
+       <Svg {...props}>
+         <title>new icon</title>
+         {/* SVG paths here */}
+       </Svg>
+     );
+   };
+   ```
+4. Add the case to the switch statement:
+   ```typescript
+   case "newIcon":
+     return <NewIcon {...props} />;
+   ```
+
+## Accessibility
+
+Each icon includes a `<title>` element for screen readers:
+
+```tsx
+<Svg {...props}>
+  <title>home icon</title>
+  {/* icon paths */}
+</Svg>
+```
+
+## Styling
+
+### Default Styles
+
+- **Size**: 24x24 pixels (`h-6 w-6`)
+- **Stroke color**: Black (`#000000`)
+- **Stroke width**: 16px
+- **Fill**: None (outline only)
+
+### Custom Styling
+
+Use Tailwind classes for customization:
+
+```tsx
+<Icon 
+  iconName="home" 
+  className="w-8 h-8 text-blue-600 hover:text-blue-800"
+/>
+```
+
+## Icon Source
+
+All icons are from **Phosphor Icons** (https://phosphoricons.com/), a flexible icon family for interfaces, diagrams, presentations, and more.
+
+## Related Components
+
+- [Navigation Component](/components/navigation) - Uses menu and close icons

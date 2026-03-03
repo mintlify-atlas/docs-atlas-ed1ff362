@@ -1,0 +1,409 @@
+---
+title: 'Notion Download'
+description: 'Pre-build script for syncing Notion content to local MDX files'
+---
+
+## Overview
+
+The Notion Download module is a build-time script that fetches content from Notion databases and generates MDX files with YAML frontmatter. It implements incremental sync by comparing timestamps to avoid unnecessary re-downloads.
+
+## Main Function
+
+### `downloadPostsAsMdx()`
+
+Fetches Notion posts and writes them as MDX files to the content directory.
+
+```typescript
+async function downloadPostsAsMdx(
+  collection: 'projects' | 'blog'
+): Promise<void[]>
+```
+
+<ParamField path="collection" type="'projects' | 'blog'" required>
+  The content collection to sync (determines which database to query)
+</ParamField>
+
+<ResponseField name="return" type="Promise<void[]>">
+  Array of promises that resolve when files are written
+</ResponseField>
+
+**Database Mapping:**
+
+- `'blog'` → `NOTION_BLOG_DB_ID`
+- `'projects'` → `NOTION_PROJECTS_DB_ID`
+
+**Query Behavior:**
+
+The function queries Notion with these filters:
+- Only pages where `public` checkbox is `true`
+- Sorted by `published` date (descending)
+
+**Output Location:**
+
+```
+src/content/blog/{page-id}.mdx
+src/content/projects/{page-id}.mdx
+```
+
+**Usage:**
+
+```typescript
+import { downloadPostsAsMdx } from '@lib/notion-download';
+
+// Sync blog posts
+await downloadPostsAsMdx('blog');
+// Writing to file: src/content/blog/abc123.mdx
+// Writing to file: src/content/blog/def456.mdx
+
+// Sync projects
+await downloadPostsAsMdx('projects');
+```
+
+## Incremental Sync
+
+### `shouldUpdateLocalFile()`
+
+Determines if a local MDX file needs to be updated based on `lastEditedTime`.
+
+```typescript
+async function shouldUpdateLocalFile(
+  serverLastEditedTime: string,
+  srcContentPath: string,
+  postId: string
+): Promise<boolean>
+```
+
+<ParamField path="serverLastEditedTime" type="string" required>
+  The `last_edited_time` from the Notion API
+</ParamField>
+
+<ParamField path="srcContentPath" type="string" required>
+  Content collection path (e.g., `'blog'` or `'projects'`)
+</ParamField>
+
+<ParamField path="postId" type="string" required>
+  Notion page ID
+</ParamField>
+
+<ResponseField name="return" type="Promise<boolean>">
+  `true` if file should be updated, `false` if up-to-date
+</ResponseField>
+
+**Logic:**
+
+1. Reads the local MDX file (if exists)
+2. Extracts `lastEditedTime` from frontmatter
+3. Compares server time vs. local time
+4. Returns `true` if server is newer OR file doesn't exist
+
+**Example:**
+
+```typescript
+// Local file frontmatter:
+// ---
+// lastEditedTime: '2025-01-01T10:00:00.000Z'
+// ---
+
+const shouldUpdate = await shouldUpdateLocalFile(
+  '2025-01-02T12:00:00.000Z',  // Server is newer
+  'blog',
+  'abc123'
+);
+// Returns: true (file will be updated)
+```
+
+## Frontmatter Generation
+
+### `pagePropertiesToFrontmatter()`
+
+Converts Notion page properties to YAML frontmatter.
+
+```typescript
+function pagePropertiesToFrontmatter(
+  pageProperties: any,
+  lastEditedTime?: string
+): string
+```
+
+<ParamField path="pageProperties" type="object" required>
+  Object of page properties (from `getPageProperties()`)
+</ParamField>
+
+<ParamField path="lastEditedTime" type="string">
+  Optional timestamp to include in frontmatter
+</ParamField>
+
+<ResponseField name="return" type="string">
+  YAML frontmatter string with `---` delimiters
+</ResponseField>
+
+**Example:**
+
+```typescript
+const properties = {
+  title: 'My Blog Post',
+  published: '2025-01-01',
+  description: 'A great post',
+  tags: 'javascript,typescript',
+  public: 'true'
+};
+
+const frontmatter = pagePropertiesToFrontmatter(
+  properties,
+  '2025-01-01T10:00:00.000Z'
+);
+
+// Output:
+// ---
+// lastEditedTime: '2025-01-01T10:00:00.000Z'
+// title: 'My Blog Post'
+// published: '2025-01-01'
+// description: 'A great post'
+// tags: 'javascript,typescript'
+// public: 'true'
+// ---
+```
+
+## Generated MDX Structure
+
+Each MDX file follows this structure:
+
+```mdx
+---
+lastEditedTime: '2025-01-01T10:00:00.000Z'
+title: 'My Blog Post'
+published: '2025-01-01'
+description: 'A great post about web development'
+path: '/blog/my-post'
+tags: 'javascript,typescript,webdev'
+public: 'true'
+---
+import { Image } from 'astro:assets';
+
+# My Blog Post
+
+This is the first paragraph.
+
+<Image src={import("@assets/file.abc123.png")} width="1200" height="800" format="webp" alt="Screenshot" />
+
+## Subheading
+
+- List item 1
+- List item 2
+```
+
+## Build Process
+
+### Integration with Astro
+
+The download script runs before every build via `scripts/index.ts`:
+
+```typescript
+// scripts/index.ts
+import { downloadPostsAsMdx } from '../src/lib/notion-download';
+
+await downloadPostsAsMdx('blog');
+await downloadPostsAsMdx('projects');
+```
+
+**Package.json scripts:**
+
+```json
+{
+  "scripts": {
+    "prebuild": "jiti scripts/index.ts",
+    "build": "astro build",
+    "predev": "jiti scripts/index.ts",
+    "dev": "astro dev"
+  }
+}
+```
+
+This ensures content is always fresh before starting the dev server or building for production.
+
+## Performance Optimizations
+
+### Parallel Processing
+
+All posts are processed in parallel using `Promise.all()`:
+
+```typescript
+return Promise.all(
+  posts.map(async (post) => {
+    // Download and write each post
+  })
+);
+```
+
+### Skip Unchanged Files
+
+Files are only written if:
+1. The file doesn't exist locally, OR
+2. The server's `lastEditedTime` is newer than the local timestamp
+
+This dramatically speeds up builds when content hasn't changed.
+
+### Early Stream Termination
+
+When reading local files, the stream is closed as soon as `lastEditedTime` is found:
+
+```typescript
+const lineListener = (line) => {
+  if (line.includes('lastEditedTime')) {
+    lastEditedTime = line.substring(line.indexOf(': ') + 2);
+    rl.close();  // Stop reading
+    rl.removeListener('line', lineListener);
+    readStream.destroy();
+  }
+};
+```
+
+## Error Handling
+
+### File Not Found
+
+If a local file doesn't exist, `shouldUpdateLocalFile()` catches the error and returns `true`:
+
+```typescript
+try {
+  const readStream = fs.createReadStream(dest);
+  // ...
+} catch (err) {
+  // File probably doesn't exist, so we should fetch it
+  return true;
+}
+```
+
+### Invalid Collection
+
+Invalid collection names throw an error:
+
+```typescript
+if (collection === 'projects') {
+  databaseId = import.meta.env.NOTION_PROJECTS_DB_ID;
+} else if (collection === 'blog') {
+  databaseId = import.meta.env.NOTION_BLOG_DB_ID;
+} else {
+  throw Error('invalid collection');
+}
+```
+
+## Console Output
+
+The module logs useful information during sync:
+
+```bash
+Fetching data_source_id for database: abc123...
+Resolved data_source_id: xyz789... for database: abc123...
+Fetching pages from Notion data source: xyz789...
+Finished fetching pages from Notion data source: xyz789...
+Downloading new asset: file.def456.png
+Writing to file: src/content/blog/abc123.mdx
+Writing to file: src/content/blog/ghi789.mdx
+```
+
+## Environment Variables
+
+<ParamField path="NOTION_TOKEN" type="string" required>
+  Notion API integration token
+</ParamField>
+
+<ParamField path="NOTION_BLOG_DB_ID" type="string" required>
+  Database ID for blog posts
+</ParamField>
+
+<ParamField path="NOTION_PROJECTS_DB_ID" type="string" required>
+  Database ID for projects
+</ParamField>
+
+## File System Paths
+
+**Constants:**
+
+```typescript
+import { ASSET_SRC_PATH, ASSET_PUBLIC_PATH } from './constants';
+
+// ASSET_SRC_PATH = 'src/assets/'
+// ASSET_PUBLIC_PATH = 'public/assets/'
+```
+
+**Output Paths:**
+
+```typescript
+const dest = path
+  .join('src', 'content', collection, post.id)
+  .concat('.mdx');
+
+// Example: src/content/blog/abc123def456.mdx
+```
+
+## Complete Example
+
+### Custom Sync Script
+
+```typescript
+// scripts/sync-notion.ts
+import { downloadPostsAsMdx } from '../src/lib/notion-download';
+
+async function syncAll() {
+  console.log('Syncing blog posts...');
+  await downloadPostsAsMdx('blog');
+  
+  console.log('Syncing projects...');
+  await downloadPostsAsMdx('projects');
+  
+  console.log('Sync complete!');
+}
+
+syncAll().catch(console.error);
+```
+
+**Run with:**
+
+```bash
+jiti scripts/sync-notion.ts
+```
+
+### Accessing Synced Content
+
+```typescript
+// src/pages/blog/index.astro
+import { getCollection } from 'astro:content';
+
+const posts = await getCollection('blog');
+const sortedPosts = posts.sort((a, b) => 
+  new Date(b.data.published).getTime() - 
+  new Date(a.data.published).getTime()
+);
+```
+
+## Future Improvements
+
+The code includes a TODO comment for potential optimization:
+
+```typescript
+// TODO: optimize this for better build times - 
+// could store in json file every time we update 
+// instead of reading from file
+```
+
+Currently, `lastEditedTime` is read from each MDX file's frontmatter. A future optimization could cache this in a JSON index file.
+
+## Related Modules
+
+- [Notion CMS](/api/notion-cms) - Query databases and blocks
+- [Notion Parse](/api/notion-parse) - Convert blocks to Markdown
+- [Notion CMS Page](/api/notion-cms#page-properties) - Extract page properties
+- [Notion CMS Asset](/api/notion-cms#asset-handling) - Download media files
+
+## Source Reference
+
+**File:** `src/lib/notion-download.ts:1-131`
+
+**Key Dependencies:**
+- `fs/promises` - Async file system operations
+- `readline` - Stream-based file reading
+- `path` - File path utilities
+- `./notion-cms` - Database queries and block retrieval
+- `./notion-cms-page` - Page property extraction
+- `./notion-parse` - Block to Markdown conversion

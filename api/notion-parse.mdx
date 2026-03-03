@@ -1,0 +1,460 @@
+---
+title: 'Notion Parse'
+description: 'Convert Notion blocks and rich text to Markdown and HTML'
+---
+
+## Overview
+
+The Notion Parse module converts Notion's block-based content format into Markdown and HTML suitable for static site generation. It handles rich text formatting, nested blocks, tables, media embeds, and more.
+
+## Core Functions
+
+### `parseBlocks()`
+
+Converts an array of Notion blocks to a Markdown string.
+
+```typescript
+function parseBlocks(blocks: BlockObjectResponse[]): string
+```
+
+<ParamField path="blocks" type="BlockObjectResponse[]" required>
+  Array of Notion block objects (typically from `getBlock()`)
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Markdown/HTML string representation of the blocks
+</ResponseField>
+
+**Usage:**
+
+```typescript
+import { getBlock } from '@lib/notion-cms';
+import { parseBlocks } from '@lib/notion-parse';
+
+const blocks = await getBlock(pageId);
+const markdown = parseBlocks(blocks);
+
+console.log(markdown);
+// # My Heading
+//
+// This is a paragraph with **bold** text.
+//
+// - List item 1
+// - List item 2
+```
+
+### `parse()`
+
+Recursively parses a single Notion block (with children) to Markdown.
+
+```typescript
+function parse(
+  block: BlockObjectResponseWithChildren,
+  depth?: number
+): string
+```
+
+<ParamField path="block" type="BlockObjectResponseWithChildren" required>
+  A Notion block object with optional children array
+</ParamField>
+
+<ParamField path="depth" type="number" default="0">
+  Indentation depth (used internally for nested blocks)
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Markdown/HTML representation of the block and its children
+</ResponseField>
+
+## Rich Text Functions
+
+### `parseRichTextBlock()`
+
+Converts Notion rich text to Markdown with inline formatting.
+
+```typescript
+function parseRichTextBlock({
+  rich_text,
+  color = 'default'
+}: RichTextBlock): string
+```
+
+<ParamField path="rich_text" type="RichText" required>
+  Array of Notion rich text items
+</ParamField>
+
+<ParamField path="color" type="ApiColor" default="'default'">
+  Block-level color (applied to entire text)
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Markdown string with HTML tags for formatting
+</ResponseField>
+
+**Supported Annotations:**
+
+- **Bold:** `<b>text</b>`
+- **Italic:** `<i>text</i>`
+- **Strikethrough:** `<s>text</s>`
+- **Underline:** `<u>text</u>`
+- **Code:** `<code>text</code>`
+- **Links:** `[text](url)`
+- **Colors:** `<span class="!text-{color}-500">text</span>`
+
+**Example:**
+
+```typescript
+import { parseRichTextBlock } from '@lib/notion-parse';
+
+const richText = [
+  {
+    plain_text: 'Hello ',
+    annotations: { bold: false, italic: false, /* ... */ }
+  },
+  {
+    plain_text: 'world',
+    annotations: { bold: true, italic: false, /* ... */ },
+    href: 'https://example.com'
+  }
+];
+
+const result = parseRichTextBlock({ rich_text: richText });
+// "Hello <b>[world](https://example.com)</b>"
+```
+
+### `richTextToPlainText()`
+
+Extracts plain text from Notion rich text (removes all formatting).
+
+```typescript
+function richTextToPlainText(richText: RichText): string
+```
+
+<ParamField path="richText" type="RichText" required>
+  Array of Notion rich text items
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Plain text string without any formatting
+</ResponseField>
+
+**Usage:**
+
+```typescript
+import { richTextToPlainText } from '@lib/notion-parse';
+
+const caption = richTextToPlainText(block.image.caption);
+// "My image caption"
+```
+
+### `parseColor()`
+
+Converts Notion color values to Tailwind CSS classes.
+
+```typescript
+function parseColor(color: ApiColor, text: string): string
+```
+
+<ParamField path="color" type="ApiColor" required>
+  Notion color value (e.g., 'red', 'blue', 'orange_background')
+</ParamField>
+
+<ParamField path="text" type="string" required>
+  The text to wrap in a colored span
+</ParamField>
+
+<ResponseField name="return" type="string">
+  HTML span with Tailwind color class
+</ResponseField>
+
+**Color Mappings:**
+
+| Notion Color | Tailwind Class |
+|--------------|----------------|
+| `gray` | `!text-gray-500` |
+| `brown` | `!text-stone-500` |
+| `orange` | `!text-orange-500` |
+| `yellow` | `!text-yellow-500` |
+| `green` | `!text-green-500` |
+| `blue` | `!text-blue-500` |
+| `purple` | `!text-purple-500` |
+| `pink` | `!text-pink-500` |
+| `red` | `!text-red-500` |
+| `gray_background` | `!bg-gray-200` |
+| `orange_background` | `!bg-orange-200` |
+| *(etc.)* | *(background variants use -200 suffix)* |
+
+## Heading Functions
+
+### `parseHeading()`
+
+Converts a Notion heading block to Markdown.
+
+```typescript
+function parseHeading(
+  richTextBlock: RichTextBlock,
+  level: number,
+  children: string[]
+): string
+```
+
+<ParamField path="richTextBlock" type="RichTextBlock" required>
+  The heading's rich text content
+</ParamField>
+
+<ParamField path="level" type="number" required>
+  Heading level (1-3 for H1-H3)
+</ParamField>
+
+<ParamField path="children" type="string[]" required>
+  Child blocks (rendered after heading)
+</ParamField>
+
+**Example Output:**
+
+```markdown
+# My Heading
+
+```
+
+## List Functions
+
+### `parseListItem()`
+
+Converts a list item block to Markdown.
+
+```typescript
+function parseListItem(
+  richTextBlock: RichTextBlock,
+  symbol: string,
+  children: string[]
+): string
+```
+
+<ParamField path="richTextBlock" type="RichTextBlock" required>
+  The list item's rich text content
+</ParamField>
+
+<ParamField path="symbol" type="string" required>
+  List marker (`"- "` for bullets, `"1. "` for numbered, `"- [ ] "` for todos)
+</ParamField>
+
+<ParamField path="children" type="string[]" required>
+  Nested list items
+</ParamField>
+
+## Supported Block Types
+
+### Text Blocks
+
+- **Paragraph:** Plain text with formatting
+- **Heading 1-3:** Markdown headings (`#`, `##`, `###`)
+- **Quote:** Blockquotes with `>` prefix
+- **Callout:** Rendered as code blocks (`` ``` ``)
+
+### Lists
+
+- **Bulleted List:** `- ` prefix
+- **Numbered List:** `1. ` prefix (all items use `1.`)
+- **To-Do List:** `- [ ]` or `- [x]` checkboxes
+
+### Code & Equations
+
+- **Code Block:** Fenced code blocks with language
+- **Equation:** Raw LaTeX expressions
+
+### Media
+
+- **Image:** Astro `<Image>` component with width/height
+- **Video:** HTML5 `<video>` element
+- **Audio:** HTML5 `<audio>` element
+- **PDF:** `<object>` embed with fallback
+- **File:** Ignored (not rendered)
+
+**Image Example:**
+
+```typescript
+<Image src={import("@assets/file.abc123.png")} width="1200" height="800" format="webp" alt="My image" />
+```
+
+### Embeds & Links
+
+- **Embed:** Link with caption
+- **Bookmark/Link Preview:** Blockquote with link
+
+### Advanced Blocks
+
+- **Table:** HTML `<table>` with header support
+- **Toggle:** `<details>` element
+- **Divider:** Horizontal rule (`___`)
+- **Table of Contents:** Ignored (not rendered)
+
+### Unsupported Blocks
+
+These blocks return empty strings:
+- `breadcrumb`
+- `column_list`, `column`
+- `link_to_page`
+- `template`
+- `synced_block`
+- `child_page`, `child_database`
+- `unsupported`
+
+## Property Parsing
+
+### `parseProperty()`
+
+Converts a Notion page property to a string value.
+
+```typescript
+function parseProperty(property: PagePropertyResponse): string
+```
+
+<ParamField path="property" type="PagePropertyResponse" required>
+  A Notion page property object
+</ParamField>
+
+<ResponseField name="return" type="string">
+  String representation of the property value
+</ResponseField>
+
+**Supported Property Types:**
+
+| Type | Output |
+|------|--------|
+| `title` | Plain text |
+| `rich_text` | Plain text |
+| `number` | Number as string |
+| `url` | URL string |
+| `checkbox` | `"true"` or `"false"` |
+| `email` | Email address |
+| `date` | ISO date string |
+| `last_edited_time` | ISO timestamp |
+| `created_time` | ISO timestamp |
+| `multi_select` | Comma-separated tags |
+| `formula` (string) | Formula result |
+| *others* | `"unsupported"` |
+
+**Usage:**
+
+```typescript
+import { parseProperty } from '@lib/notion-parse';
+
+const titleProperty = page.properties.title;
+const title = parseProperty(titleProperty);
+// "My Page Title"
+
+const tagsProperty = page.properties.tags;
+const tags = parseProperty(tagsProperty);
+// "javascript,typescript,react"
+```
+
+## Special Formatting
+
+### HTML Escaping
+
+All `<` characters in text are escaped to `&lt;` to prevent HTML injection:
+
+```typescript
+markdown = markdown.replace(/</g, "&lt;");
+```
+
+### Indentation
+
+Child blocks are indented using the `INDENT` constant (`"  "` - 2 spaces):
+
+```typescript
+import { INDENT } from './constants';
+
+children = block.children.map((child) =>
+  INDENT.repeat(depth + 2).concat(parse(child, depth + 2))
+);
+```
+
+### Line Endings
+
+The module uses `EOL` (`"\n"`) for consistent line breaks across platforms.
+
+## Examples
+
+### Complete Page Conversion
+
+```typescript
+import { getBlock } from '@lib/notion-cms';
+import { parseBlocks } from '@lib/notion-parse';
+import fs from 'fs/promises';
+
+const pageId = 'abc123...';
+const blocks = await getBlock(pageId);
+const markdown = parseBlocks(blocks);
+
+await fs.writeFile('output.md', markdown);
+```
+
+### Table Rendering
+
+```typescript
+// Notion table block
+{
+  type: 'table',
+  table: { has_column_header: true, has_row_header: true },
+  children: [
+    { type: 'table_row', table_row: { cells: [[{plain_text: 'Name'}], [{plain_text: 'Age'}]] } },
+    { type: 'table_row', table_row: { cells: [[{plain_text: 'Alice'}], [{plain_text: '30'}]] } },
+  ]
+}
+
+// Rendered HTML
+<table>
+  <colgroup><col class="font-bold" /></colgroup>
+  <tr><th>Name</th><th>Age</th></tr>
+  <tr><td>Alice</td><td>30</td></tr>
+</table>
+```
+
+### Custom Colored Text
+
+```typescript
+const richText = [{
+  plain_text: 'Important',
+  annotations: { color: 'red', bold: true }
+}];
+
+const result = parseRichTextBlock({ rich_text: richText });
+// <b><span class="!text-red-500">Important</span></b>
+```
+
+## Type Definitions
+
+```typescript
+import type { BlockObjectResponse } from '@notionhq/client/build/src/api-endpoints';
+
+export type BlockObjectResponseWithChildren = BlockObjectResponse & {
+  children?: BlockObjectResponse[];
+};
+
+export type RichText = RichTextItemResponse[];
+
+export type RichTextBlock = { 
+  rich_text: RichText; 
+  color?: ApiColor 
+};
+
+export type ApiColor = ParagraphBlockObjectResponse["paragraph"]["color"];
+```
+
+## Related Modules
+
+- [Notion CMS](/api/notion-cms) - Retrieve blocks from Notion
+- [Notion Download](/api/notion-download) - Use parser for MDX generation
+- [HTML Utility](/api/notion-parse#html-helper) - Template literal helper
+
+## Source Reference
+
+**File:** `src/lib/notion-parse.ts:1-350`
+
+**Dependencies:**
+- `@notionhq/client` - Notion API types
+- `./notion-types` - Custom type definitions
+- `./html` - HTML template helper
+- `./constants` - EOL and INDENT constants

@@ -1,0 +1,247 @@
+---
+title: Local Development Setup
+description: Set up your local development environment for Andrew Gao's personal website
+---
+
+This guide will walk you through setting up the development environment for this Astro-based personal website with Notion CMS integration.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v18 or higher)
+- **pnpm** package manager
+- **Git** for version control
+- A **Notion account** with API access
+
+## Quick Start
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone <repository-url>
+    cd website-astro
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    The project uses pnpm as the package manager:
+    
+    ```bash
+    pnpm install
+    ```
+    
+    This installs all dependencies including:
+    - Astro 5.16.9
+    - Tailwind CSS 4.1.18
+    - Solid.js 1.9.10 and React 19.2.3
+    - Notion API client
+    - Vitest for testing
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the project root:
+    
+    ```bash
+    touch .env
+    ```
+    
+    Add your Notion API credentials:
+    
+    ```env
+    # Notion API Authentication
+    NOTION_TOKEN=secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+    # Content Databases
+    NOTION_BLOG_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_PROJECTS_DB_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+    # Page IDs
+    NOTION_PAGE_ID_HOME=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_PAGE_ID_BLOG=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_PAGE_ID_READ=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_PAGE_ID_PLACES=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+    # Navigation and Data Databases
+    NOTION_DB_ID_PAGES=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_DB_ID_PLACES=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_DB_ID_KNOWLEDGE_2024=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_DB_ID_KNOWLEDGE_2025=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    NOTION_DB_ID_KNOWLEDGE_2026=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ```
+    
+    <Info>
+      **Getting Notion IDs:**
+      - **Database ID:** Last 32 characters of the database URL
+      - **Page ID:** Extract from "Copy link" in Notion
+      - **Token:** Create an integration at [notion.so/my-integrations](https://www.notion.so/my-integrations)
+    </Info>
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    pnpm dev
+    ```
+    
+    This command:
+    1. Runs `jiti scripts/index.ts` to sync Notion content
+    2. Downloads blog posts and projects as MDX files
+    3. Starts the Astro dev server on `http://localhost:4321`
+    
+    <Note>
+      The pre-build script automatically syncs content from Notion before starting the dev server. This ensures you're always working with the latest content.
+    </Note>
+  </Step>
+</Steps>
+
+## Project Structure
+
+Understanding the directory layout:
+
+```
+/home/user/website-astro/
+├── src/
+│   ├── components/          # UI components (Astro, React, Solid.js)
+│   ├── content/            # Auto-generated MDX from Notion
+│   │   ├── blog/           # Blog posts
+│   │   └── projects/       # Project entries
+│   ├── layouts/
+│   │   └── Layout.astro    # Main layout wrapper
+│   ├── lib/                # Core utilities
+│   │   ├── notion-*.ts     # Notion integration modules
+│   │   ├── breakpoints.ts  # Responsive breakpoints
+│   │   └── tests/          # Vitest tests
+│   ├── pages/              # File-based routing
+│   ├── styles/             # CSS configuration
+│   │   ├── global.css      # Tailwind imports
+│   │   ├── fonts.css       # Variable fonts
+│   │   ├── prose.css       # Typography overrides
+│   │   └── animations.css  # Custom animations
+│   └── assets/             # Local images
+├── scripts/
+│   └── index.ts           # Build-time Notion sync
+├── public/                # Static assets
+├── astro.config.mjs       # Astro configuration
+└── package.json           # Dependencies
+```
+
+## Development Scripts
+
+Available npm scripts from package.json:
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `pnpm dev` | `astro dev` | Start dev server with Notion sync |
+| `pnpm build` | `astro build` | Build for production |
+| `pnpm preview` | `astro preview` | Preview production build |
+| `pnpm test` | `vitest` | Run tests in watch mode |
+| `pnpm coverage` | `vitest run --coverage` | Generate coverage report |
+
+<Note>
+  Both `dev` and `build` scripts run `predev` and `prebuild` hooks that execute `jiti scripts/index.ts` to sync Notion content before the main command.
+</Note>
+
+## TypeScript Configuration
+
+The project uses TypeScript with these key settings (tsconfig.json:1-16):
+
+```json
+{
+  "extends": "astro/tsconfigs/base",
+  "compilerOptions": {
+    "types": ["astro/client"],
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "baseUrl": ".",
+    "paths": {
+      "@components/*": ["src/components/*"],
+      "@assets/*": ["src/assets/*"]
+    }
+  }
+}
+```
+
+**Import aliases** allow cleaner imports:
+
+```typescript
+import Component from '@components/Component.astro';
+import image from '@assets/image.png';
+```
+
+## Verifying Your Setup
+
+<Steps>
+  <Step title="Check the dev server">
+    Navigate to `http://localhost:4321` in your browser. You should see the home page.
+  </Step>
+
+  <Step title="Verify Notion sync">
+    Check that MDX files were created:
+    
+    ```bash
+    ls src/content/blog/
+    ls src/content/projects/
+    ```
+    
+    You should see `.mdx` files corresponding to your Notion database entries.
+  </Step>
+
+  <Step title="Run tests">
+    ```bash
+    pnpm test
+    ```
+    
+    All tests should pass without errors.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Content Not Syncing
+
+**Problem:** No MDX files generated in `src/content/`
+
+**Solutions:**
+- Verify `.env` file has correct `NOTION_TOKEN` and database IDs
+- Ensure Notion integration has access to databases/pages
+- Check that posts have the `public` checkbox enabled in Notion
+- Run the sync script manually:
+  ```bash
+  node --loader jiti scripts/index.ts
+  ```
+
+### Port Already in Use
+
+**Problem:** Port 4321 is already in use
+
+**Solution:** Stop the conflicting process or specify a different port:
+```bash
+pnpm dev -- --port 3000
+```
+
+### TypeScript Errors
+
+**Problem:** Import errors or type mismatches
+
+**Solutions:**
+- Restart your IDE/editor
+- Clear TypeScript cache: `rm -rf node_modules/.astro`
+- Ensure dependencies are installed: `pnpm install`
+
+### Build Failures
+
+**Problem:** Build fails with errors
+
+**Solutions:**
+- Check for missing environment variables
+- Verify MDX frontmatter matches schema in `src/content.config.ts`
+- Run with verbose logging: `pnpm build --verbose`
+
+## Next Steps
+
+Now that your environment is set up:
+
+- Learn about [development workflows](/development/workflows)
+- Understand [styling conventions](/development/styling)
+- Set up [testing](/development/testing)
+- Explore the [codebase structure](/overview/architecture)

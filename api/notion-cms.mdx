@@ -1,0 +1,284 @@
+---
+title: 'Notion CMS'
+description: 'Core functions for querying Notion databases and retrieving block content'
+---
+
+## Overview
+
+The Notion CMS module provides the core API for interacting with Notion as a headless CMS. It handles database queries, block retrieval, asset downloading, and response normalization.
+
+## Key Concepts
+
+### Data Sources
+
+With Notion API version 2025-09-03, databases contain one or more **data sources**. This module automatically resolves the primary data source ID for each database and caches it for performance.
+
+## Functions
+
+### `ensureFullResponse()`
+
+Converts partial Notion API responses to full responses with type safety.
+
+```typescript
+function ensureFullResponse<T, PT>(result: T | PT): T
+```
+
+<ParamField path="result" type="T | PT" required>
+  The Notion API response that may be partial or full
+</ParamField>
+
+<ResponseField name="return" type="T">
+  The full response object with all properties populated
+</ResponseField>
+
+**Usage:**
+
+```typescript
+import { ensureFullResponse } from '@lib/notion-cms';
+import type { PageObjectResponse, PartialPageObjectResponse } from '@notionhq/client/build/src/api-endpoints';
+
+const response = await notion.pages.retrieve({ page_id: pageId });
+const fullPage = ensureFullResponse<PageObjectResponse, PartialPageObjectResponse>(response);
+```
+
+### `getDataSourceId()`
+
+Retrieves and caches the primary data source ID for a Notion database.
+
+```typescript
+async function getDataSourceId(databaseId: string): Promise<string>
+```
+
+<ParamField path="databaseId" type="string" required>
+  The Notion database ID (32-character UUID)
+</ParamField>
+
+<ResponseField name="return" type="Promise<string>">
+  The data source ID for the database's primary data source
+</ResponseField>
+
+**Features:**
+- Automatic caching to avoid repeated API calls
+- Console logging for debugging
+- Error handling for databases without data sources
+
+**Usage:**
+
+```typescript
+import { getDataSourceId } from '@lib/notion-cms';
+
+const dataSourceId = await getDataSourceId('abc123...');
+// Fetching data_source_id for database: abc123...
+// Resolved data_source_id: xyz789... for database: abc123...
+```
+
+### `queryNotionDatabase()`
+
+Queries a Notion database and returns all matching pages (automatically paginated).
+
+```typescript
+async function queryNotionDatabase(
+  databaseId: string,
+  options?: Omit<QueryDataSourceParameters, 'data_source_id'>,
+): Promise<PageObjectResponse[]>
+```
+
+<ParamField path="databaseId" type="string" required>
+  The Notion database ID to query
+</ParamField>
+
+<ParamField path="options" type="QueryDataSourceParameters">
+  Optional query parameters (filter, sorts, page_size, etc.)
+</ParamField>
+
+<ResponseField name="return" type="Promise<PageObjectResponse[]>">
+  Array of all pages matching the query criteria
+</ResponseField>
+
+**Features:**
+- Automatic pagination (fetches all results)
+- Filters out non-page objects
+- Ensures full response objects (not partial)
+- Automatically resolves data source ID
+
+**Usage:**
+
+```typescript
+import { queryNotionDatabase } from '@lib/notion-cms';
+
+// Query all public blog posts, sorted by publish date
+const posts = await queryNotionDatabase(
+  import.meta.env.NOTION_BLOG_DB_ID,
+  {
+    filter: {
+      property: 'public',
+      checkbox: { equals: true }
+    },
+    sorts: [
+      { property: 'published', direction: 'descending' }
+    ]
+  }
+);
+
+console.log(`Found ${posts.length} posts`);
+```
+
+**Complex Filter Example:**
+
+```typescript
+const posts = await queryNotionDatabase(databaseId, {
+  filter: {
+    and: [
+      {
+        property: 'public',
+        checkbox: { equals: true }
+      },
+      {
+        property: 'published',
+        date: { on_or_before: new Date().toISOString() }
+      }
+    ]
+  },
+  sorts: [
+    { property: 'published', direction: 'descending' }
+  ]
+});
+```
+
+### `getBlock()`
+
+Recursively retrieves all blocks (and their children) for a given page or block ID.
+
+```typescript
+async function getBlock(blockId: string): Promise<BlockObjectResponse[]>
+```
+
+<ParamField path="blockId" type="string" required>
+  The block or page ID to retrieve content from
+</ParamField>
+
+<ResponseField name="return" type="Promise<BlockObjectResponse[]>">
+  Array of block objects with nested children and downloaded assets
+</ResponseField>
+
+**Features:**
+- Recursive child block retrieval
+- Automatic asset downloading for images, videos, PDFs, and audio
+- Local file URL remapping
+- Handles pagination (up to 100 blocks per request)
+
+**Asset Handling:**
+
+For supported file types (`image`, `video`, `audio`, `pdf`), the function:
+1. Downloads the file to the local filesystem
+2. Remaps the URL to the local path
+3. Adds width/height parameters for images
+
+**Usage:**
+
+```typescript
+import { getBlock } from '@lib/notion-cms';
+
+// Get all blocks from a page
+const blocks = await getBlock(pageId);
+
+// Blocks with children have a .children property
+blocks.forEach(block => {
+  console.log(block.type);
+  if (block.has_children && 'children' in block) {
+    console.log(`  - ${block.children.length} child blocks`);
+  }
+});
+```
+
+**Block Tree Structure:**
+
+```typescript
+{
+  id: 'block-123',
+  type: 'paragraph',
+  paragraph: { /* ... */ },
+  has_children: true,
+  children: [  // Added by getBlock()
+    {
+      id: 'block-456',
+      type: 'bulleted_list_item',
+      bulleted_list_item: { /* ... */ },
+      has_children: false
+    }
+  ]
+}
+```
+
+## Internal Functions
+
+### `getBlockChildren()`
+
+Retrieves immediate children of a block (non-recursive, internal use only).
+
+```typescript
+async function getBlockChildren(blockId: string): Promise<BlockObjectResponse[]>
+```
+
+This function handles pagination automatically, fetching up to 100 blocks per request.
+
+## Type Guards
+
+The module uses TypeScript type guards to ensure runtime safety:
+
+```typescript
+if ('object' in result && result.object === 'page') {
+  // TypeScript knows this is a PageObjectResponse
+}
+
+if ('type' in block && block.type === 'paragraph') {
+  // TypeScript knows this is a ParagraphBlockObjectResponse
+}
+```
+
+## Caching
+
+Data source IDs are cached in a `Map` to avoid repeated API calls:
+
+```typescript
+const dataSourceIdCache = new Map<string, string>();
+```
+
+This cache persists for the lifetime of the Node.js process (e.g., during a build).
+
+## Error Handling
+
+**Missing Data Sources:**
+
+```typescript
+if (!database.data_sources || database.data_sources.length === 0) {
+  throw new Error(`No data sources found for database: ${databaseId}`);
+}
+```
+
+**Asset Download Failures:**
+
+If an asset download fails, the original Notion URL is returned instead of throwing an error.
+
+## Performance Considerations
+
+- **Pagination:** All queries automatically fetch all pages (not limited to 100 results)
+- **Parallel Processing:** Block children are processed in parallel using `Promise.all()`
+- **Caching:** Data source IDs are cached to minimize API calls
+- **Asset Downloads:** Only downloads files that don't already exist locally
+
+## Related Modules
+
+- [Notion Client](/api/notion-client) - The underlying API client
+- [Notion Parse](/api/notion-parse) - Convert blocks to Markdown
+- [Notion CMS Asset](/api/notion-cms#asset-handling) - Asset download handling
+- [Notion CMS Page](/api/notion-cms#page-properties) - Page property extraction
+
+## Source Reference
+
+**File:** `src/lib/notion-cms.ts:1-182`
+
+**Key Dependencies:**
+- `@notionhq/client` - Notion API types and client
+- `./notion-client` - Shared API client instance
+- `./notion-cms-asset` - Asset downloading functionality

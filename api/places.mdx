@@ -1,0 +1,231 @@
+---
+title: "places"
+description: "Places data utilities for Google Maps scraping and Notion synchronization"
+---
+
+Utilities for scraping Google Maps saved places, parsing location data, and synchronizing with Notion databases.
+
+## Overview
+
+This module provides functions to:
+- Scrape Google Maps saved places using Puppeteer
+- Parse place data into structured JSON
+- Sync places to Notion database
+- Manage duplicate detection
+
+## Types
+
+### Place
+
+Represents a geographical place with metadata.
+
+```typescript
+interface Place {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  notes: string;
+  timestampMs: number;
+  graphId: string;
+}
+```
+
+<ParamField path="name" type="string" required>
+  The name of the place
+</ParamField>
+
+<ParamField path="address" type="string" required>
+  Full street address
+</ParamField>
+
+<ParamField path="latitude" type="number" required>
+  Latitude coordinate
+</ParamField>
+
+<ParamField path="longitude" type="number" required>
+  Longitude coordinate
+</ParamField>
+
+<ParamField path="notes" type="string" required>
+  User notes or description
+</ParamField>
+
+<ParamField path="timestampMs" type="number" required>
+  Timestamp in milliseconds when place was saved
+</ParamField>
+
+<ParamField path="graphId" type="string" required>
+  Google Maps internal graph ID
+</ParamField>
+
+## Functions
+
+### parseArrayToJson()
+
+Converts Google Maps raw array data into a structured Place object.
+
+<ParamField path="data" type="any[]" required>
+  Raw array data from Google Maps APP_INITIALIZATION_STATE
+</ParamField>
+
+<ResponseField name="place" type="Place">
+  Parsed place object with structured fields
+</ResponseField>
+
+```typescript
+function parseArrayToJson(data: any[]): Place {
+  return {
+    name: data[2],
+    address: data[1][4],
+    latitude: data[1][5][2],
+    longitude: data[1][5][3],
+    notes: data[3],
+    timestampMs: data[9][0] * 1000,
+    graphId: data[1][7],
+  };
+}
+```
+
+### getData()
+
+Scrapes Google Maps saved places using Puppeteer and saves to JSON file.
+
+**Process:**
+1. Launches headless Chrome browser with Chromium
+2. Navigates to Google Maps place list URL
+3. Extracts `APP_INITIALIZATION_STATE` from window object
+4. Parses nested array structure
+5. Saves to `public/places.json`
+
+<ResponseField name="void" type="Promise<void>">
+  Writes parsed data to `public/places.json`
+</ResponseField>
+
+**Configuration:**
+- Uses `@sparticuz/chromium` for serverless environments
+- Headless mode enabled
+- 30-second navigation timeout
+- 500ms wait for dynamic content
+
+```typescript
+async function getData() {
+  const placeId = "hie8OZlTQ5613oEw5K-wWg";
+  const url = `https://www.google.com/maps/place/data=!3m1!4b1!4m3!11m2!2s${placeId}!3e3`;
+  
+  const browser = await puppeteer.launch({
+    executablePath: await chromium.executablePath(),
+    headless: true,
+    args: [...chromium.args, "--disable-web-security", "--no-sandbox"],
+  });
+  
+  // ... scraping logic
+}
+```
+
+### getExistingPages()
+
+Queries Notion places database and returns a map of existing coordinates.
+
+<ResponseField name="pages" type="Map<string, string>">
+  Map with keys as "latitude,longitude" and values as place names
+</ResponseField>
+
+**Purpose:** Prevents duplicate place entries by checking coordinates.
+
+```typescript
+async function getExistingPages(): Promise<Map<string, string>> {
+  const placesDbId = import.meta.env.NOTION_DB_ID_PLACES;
+  const response = await queryNotionDatabase(placesDbId);
+  
+  const pages = new Map<string, string>();
+  response.forEach((page) => {
+    const coords =
+      page.properties.latitude["number"] +
+      "," +
+      page.properties.longitude["number"];
+    pages.set(coords, page.properties.name["title"][0].text.content);
+  });
+  return pages;
+}
+```
+
+### createPlacePage()
+
+Creates a new place entry in the Notion database.
+
+<ParamField path="place" type="Place" required>
+  Place object to create in Notion
+</ParamField>
+
+<ResponseField name="response" type="CreatePageResponse">
+  Notion API response with created page details
+</ResponseField>
+
+**Properties created:**
+- `name` (title): Place name
+- `address` (rich_text): Full address
+- `latitude` (number): Latitude coordinate
+- `longitude` (number): Longitude coordinate
+- `notes` (rich_text): User notes
+- `timestampMs` (number): Save timestamp
+- `graphId` (rich_text): Google Maps graph ID
+
+```typescript
+async function createPlacePage(place: Place): Promise<CreatePageResponse> {
+  const placesDbId = import.meta.env.NOTION_DB_ID_PLACES;
+  const dataSourceId = await getDataSourceId(placesDbId);
+
+  return await notion.pages.create({
+    parent: { data_source_id: dataSourceId, type: "data_source_id" },
+    properties: {
+      name: { title: [{ text: { content: place.name } }] },
+      address: { type: "rich_text", rich_text: [{ text: { content: place.address } }] },
+      // ... other properties
+    },
+  });
+}
+```
+
+### writeToNotion()
+
+Reads `public/places.json` and syncs new places to Notion database.
+
+**Process:**
+1. Reads JSON file from `public/places.json`
+2. Fetches existing pages from Notion
+3. Checks for duplicates using coordinates
+4. Creates new pages for unique places
+5. Logs skipped and created pages
+
+<ResponseField name="void" type="Promise<void>">
+  Logs summary of created and skipped pages
+</ResponseField>
+
+## Usage Example
+
+```typescript
+import { getData, writeToNotion } from '@lib/places';
+
+// Scrape Google Maps and save to JSON
+await getData();
+
+// Sync scraped data to Notion
+await writeToNotion();
+```
+
+## Configuration
+
+<ParamField path="PLACES_SAVE_PATH" type="string" default="public/places.json">
+  File path where scraped places data is saved
+</ParamField>
+
+<ParamField path="NOTION_DB_ID_PLACES" type="string" required>
+  Environment variable for Notion places database ID
+</ParamField>
+
+## Related
+
+- Used by: Map component (`src/components/Map.tsx:20`)
+- Depends on: `src/lib/notion-cms.ts`, `src/lib/notion-client.ts`
+- Source: `src/lib/places.ts:1`

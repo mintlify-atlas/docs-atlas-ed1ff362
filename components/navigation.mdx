@@ -1,0 +1,173 @@
+---
+title: Navigation Component
+description: Notion-powered navigation with responsive mobile menu
+---
+
+# Navigation Component
+
+The Navigation component provides a dynamic, responsive header menu powered by Notion CMS. It exists in two implementations: a server-rendered Astro component and an interactive Solid.js component.
+
+## Astro Implementation
+
+### Location
+
+`~/workspace/source/src/components/Navigation.astro`
+
+### Props
+
+<ParamField path="isFixed" type="boolean" default="false">
+  Whether the navigation bar should be fixed/sticky at the top of the viewport
+</ParamField>
+
+### TypeScript Interface
+
+```typescript
+interface Props {
+  isFixed?: boolean;
+}
+```
+
+See `~/workspace/source/src/components/Navigation.astro:6-8`.
+
+### Data Source
+
+Navigation items are dynamically loaded from the Notion database specified by `NOTION_DB_ID_PAGES`. The component queries for:
+- Pages where `path ≠ "/"` (excludes home page)
+- Pages where `public = true` (only visible pages)
+- Sorted by `order` property (ascending)
+
+See `~/workspace/source/src/components/Navigation.astro:10-38`.
+
+### Usage Example
+
+```astro
+---
+import Navigation from '@components/Navigation.astro';
+---
+
+<Navigation isFixed={true} />
+```
+
+The component is automatically included in `Layout.astro`, so you typically don't need to import it directly.
+
+### Rendered Structure
+
+```html
+<header class="fixed top-3 left-0 right-0 z-20 max-w-prose mx-auto w-full">
+  <ul class="flex gap-3 uppercase text-stone-100 text-xl font-arial px-2 py-1 bg-black mx-5 md:mx-0">
+    <li><a href="/">高 Andrew</a></li>
+    <li class="flex-1 block" aria-hidden="true"></li>
+    <!-- Dynamic navigation items from Notion -->
+    <li class="hover:underline"><a href="/blog">Blog</a></li>
+    <li class="hover:underline"><a href="/projects">Projects</a></li>
+  </ul>
+</header>
+```
+
+## Solid.js Implementation
+
+### Location
+
+`~/workspace/source/src/components/Navigation.tsx`
+
+### Props
+
+<ParamField path="routes" type="Array<{ name: string; path: string }>" required>
+  Array of navigation route objects with `name` and `path` properties
+</ParamField>
+
+<ParamField path="className" type="string" default="">
+  Additional CSS classes applied to the `<nav>` element
+</ParamField>
+
+<ParamField path="contentClassName" type="string" default="">
+  Additional CSS classes applied to the navigation list (`<ul>`) element
+</ParamField>
+
+### TypeScript Interface
+
+```typescript
+interface NavigationProps {
+  routes: Array<{ name: string; path: string }>;
+  className?: string;
+  contentClassName?: string;
+}
+```
+
+See `~/workspace/source/src/components/Navigation.tsx:7-11`.
+
+### Features
+
+#### Responsive Mobile Menu
+
+- Hamburger menu icon on mobile (`md` breakpoint and below)
+- Collapsible menu with backdrop overlay
+- Smooth transitions and animations
+- Works without JavaScript (using `:target` pseudo-class)
+
+#### Dynamic Border
+
+- Border appears when scrolling down (after 48px scroll)
+- Backdrop blur with semi-transparent background
+- Transitions smoothly based on scroll position
+
+See `~/workspace/source/src/components/Navigation.tsx:22-35` for scroll handling logic.
+
+#### State Management
+
+```typescript
+const [width, setWidth] = createSignal(0);        // Window width
+const [scroll, setScroll] = createSignal(0);      // Scroll position
+const [checked, setChecked] = createSignal(false); // Menu open/closed
+const isBorderVisible = createMemo(() => scroll() > 48);
+```
+
+### Usage Example
+
+```tsx
+import Navigation from '@components/Navigation';
+
+const routes = [
+  { name: 'Blog', path: '/blog' },
+  { name: 'Projects', path: '/projects' },
+  { name: 'About', path: '/about' },
+];
+
+<Navigation 
+  routes={routes}
+  className="custom-nav-class"
+  contentClassName="custom-list-class"
+/>
+```
+
+## Managing Navigation Items
+
+To add or modify navigation items:
+
+1. Open your Notion database (`NOTION_DB_ID_PAGES`)
+2. Add a new page with properties:
+   - **title**: Display text (e.g., "Blog")
+   - **path**: URL path (e.g., "/blog")
+   - **order**: Numeric sort order
+   - **public**: Checkbox (set to true)
+3. Run `pnpm build` or `pnpm dev` to regenerate the site
+
+The navigation will automatically update on the next build.
+
+## Styling
+
+Key styling classes:
+
+- **Desktop**: Horizontal flex layout with gap spacing
+- **Mobile**: Vertical stack with full-width items
+- **Active state**: Underline decoration
+- **Hover state**: Underline and text color change
+- **Background**: Black background with stone-100 text
+- **Font**: Arial, uppercase, bold
+
+See `~/workspace/source/src/components/Navigation.astro:49-70` for Astro styling.
+
+## Related Components
+
+- [Layout Component](/components/layout) - Includes Navigation automatically
+- [Icon Component](/components/icons) - Used for menu icons in Solid.js version

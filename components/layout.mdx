@@ -1,0 +1,171 @@
+---
+title: Layout Component
+description: Main layout wrapper for all pages with SEO and navigation support
+---
+
+# Layout Component
+
+The `Layout.astro` component is the main layout wrapper used across all pages in Andrew Gao's personal website. It provides consistent structure, SEO optimization, and navigation.
+
+## Location
+
+`~/workspace/source/src/layouts/Layout.astro`
+
+## Props
+
+The Layout component extends the `Head.astro` props and adds additional layout customization options.
+
+<ParamField path="title" type="string" required>
+  Page title that appears in browser tab and SEO meta tags
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Meta description for SEO and social media previews
+</ParamField>
+
+<ParamField path="path" type="string" required>
+  Current page path used for canonical URL (e.g., `/blog`, `/projects`)
+</ParamField>
+
+<ParamField path="imageUrl" type="string">
+  Open Graph image URL for social media sharing. Defaults to `/background.jpg`
+</ParamField>
+
+<ParamField path="className" type="string">
+  Additional CSS classes applied to the default slot container
+</ParamField>
+
+<ParamField path="bodyClassName" type="string">
+  Additional CSS classes applied to the `<body>` element
+</ParamField>
+
+<ParamField path="mainClassName" type="string">
+  Additional CSS classes applied to the `<main>` element
+</ParamField>
+
+<ParamField path="isNavigationFixed" type="boolean" default="true">
+  Whether the navigation should be sticky/fixed at the top of the page
+</ParamField>
+
+## TypeScript Interface
+
+```typescript
+interface Props extends HeadProps {
+  className?: string;
+  bodyClassName?: string;
+  mainClassName?: string;
+  isNavigationFixed?: boolean;
+}
+```
+
+See `~/workspace/source/src/layouts/Layout.astro:8-26` for the full interface definition.
+
+## Slots
+
+The Layout component provides multiple slots for flexible content organization:
+
+- **Default slot**: Main page content with automatic padding and responsive max-width
+- **`head` slot**: Additional elements to inject into `<head>` (e.g., external stylesheets)
+- **`main-p-0` slot**: Content placed in `<main>` without default padding (useful for full-width components like maps)
+
+## Usage Examples
+
+### Basic Page Layout
+
+```astro
+---
+import Layout from '@layouts/Layout.astro';
+import { getPageProperties } from '@lib/notion-cms-page';
+
+const pageId = import.meta.env.NOTION_PAGE_ID_BLOG;
+const properties = await getPageProperties(pageId);
+---
+
+<Layout {...properties}>
+  <h1>Blog Posts</h1>
+  <p>Welcome to my blog!</p>
+</Layout>
+```
+
+See `~/workspace/source/src/pages/index.astro:25-29` for a real example.
+
+### Layout with Custom Classes
+
+```astro
+<Layout
+  title="Blog Post Title"
+  description="Post description for SEO"
+  path="/blog/post-slug"
+  className="prose mx-auto break-words"
+>
+  <h1>Post Title</h1>
+  <Content />
+</Layout>
+```
+
+See `~/workspace/source/src/pages/blog/[slug].astro:30` for this pattern in use.
+
+### Layout with Non-Fixed Navigation
+
+```astro
+<Layout
+  {...properties}
+  className="mx-auto max-w-prose prose-a:underline"
+  isNavigationFixed={false}
+>
+  <!-- Page content -->
+</Layout>
+```
+
+See `~/workspace/source/src/pages/index.astro:25-29` for the home page implementation.
+
+### Full-Width Content with Slots
+
+```astro
+<Layout
+  {...pageProperties}
+  className="prose mx-auto top-0 pb-3!"
+  bodyClassName="h-full"
+  mainClassName="flex flex-col h-full"
+>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    slot="head"
+  />
+
+  <Fragment set:html={pageContent} slot="default" />
+  <Map client:only="solid-js" places={places} slot="main-p-0" />
+</Layout>
+```
+
+See `~/workspace/source/src/pages/places.astro:27-43` for the places/map page example.
+
+## Features
+
+### Automatic SEO
+
+The Layout component automatically includes:
+- Meta tags via the `Head.astro` component
+- Open Graph tags for social sharing
+- Twitter Card metadata
+- Canonical URL generation
+
+### Responsive Padding
+
+Default content padding adapts based on `isNavigationFixed`:
+- Fixed navigation: `pt-13` (top padding)
+- Non-fixed navigation: `pt-3` (top padding)
+- Horizontal padding: `px-5` on mobile, `md:px-0` on desktop
+
+### Navigation Integration
+
+Automatically renders the `Navigation.astro` component with:
+- Gradient overlay when navigation is fixed
+- Consistent z-index layering
+- Responsive behavior
+
+## Related Components
+
+- [Head Component](/components/head) - SEO meta tags
+- [Navigation Component](/components/navigation) - Header navigation

@@ -1,0 +1,83 @@
+---
+title: "marked"
+description: "Marked.js wrapper utility for custom markdown rendering"
+---
+
+Wraps the Marked.js library with custom renderers for enhanced markdown parsing.
+
+## Overview
+
+This utility configures Marked.js with a custom renderer for task list items, ensuring proper HTML structure for checkbox lists.
+
+## Import
+
+```typescript
+import { marked } from '@lib/marked';
+```
+
+## Functions
+
+### marked.parse()
+
+Parses markdown text and converts it to HTML using the configured custom renderers.
+
+<ParamField path="markdown" type="string" required>
+  The markdown text to parse
+</ParamField>
+
+<ParamField path="options" type="MarkedOptions">
+  Optional configuration object for parsing behavior
+</ParamField>
+
+<ResponseField name="html" type="string">
+  The rendered HTML output
+</ResponseField>
+
+## Custom Renderers
+
+### Task List Renderer
+
+The custom `listitem` renderer handles task list items with proper label wrapping:
+
+```typescript
+const renderer = {
+  listitem(text: string, task: boolean, _checked: boolean) {
+    if (task && text.includes("<label>")) {
+      return (
+        "<li class='task-list-item'><label>" +
+        text.replace("<label>", "") +
+        "</li>"
+      );
+    }
+    return false;
+  },
+};
+```
+
+**Behavior:**
+- Detects task list items (checkboxes)
+- Wraps content in `<li class='task-list-item'>`
+- Ensures `<label>` tag is properly positioned
+- Returns `false` for non-task list items (uses default renderer)
+
+## Usage Example
+
+```typescript
+import { marked } from '@lib/marked';
+
+const markdown = `
+# Hello World
+
+- [ ] Todo item
+- [x] Completed item
+
+Regular **markdown** content.
+`;
+
+const html = marked.parse(markdown);
+```
+
+## Related
+
+- Used in: `src/lib/notion-parse.ts` for converting Notion blocks to HTML
+- Source: `src/lib/marked.ts:1`

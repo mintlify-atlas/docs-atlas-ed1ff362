@@ -1,0 +1,267 @@
+---
+title: Map Component
+description: Interactive Leaflet map with Solid.js for visualizing places
+---
+
+# Map Component
+
+The Map component is an interactive Leaflet-based map built with Solid.js for visualizing places on Andrew Gao's website. It features dynamic marker rendering, popups, and responsive behavior.
+
+## Location
+
+`~/workspace/source/src/components/Map.tsx`
+
+## Props
+
+<ParamField path="places" type="Place[]" required>
+  Array of place objects to display on the map
+</ParamField>
+
+### Place Interface
+
+```typescript
+interface Place {
+  name: string;          // Place name
+  address: string;       // Full address
+  latitude: number;      // Latitude coordinate
+  longitude: number;     // Longitude coordinate
+  notes: string;         // Optional notes/description
+  timestampMs: number;   // Timestamp when added (milliseconds)
+  graphId: string;       // Google Maps graph ID
+}
+```
+
+See `~/workspace/source/src/lib/places.ts:10-18` for the type definition.
+
+## Features
+
+### Dynamic Marker Visibility
+
+The map displays different marker types based on zoom level:
+
+- **Zoom level ≥ 11**: Pin markers (📌) with full detail
+- **Zoom level < 11**: Small dot markers for overview
+
+See `~/workspace/source/src/components/Map.tsx:35` for the `MIN_ZOOM_PINS` constant.
+
+### Interactive Markers
+
+- Click marker to view details in popup/sheet
+- Hover effects for better UX
+- Custom icons with border and shadow
+
+Pin icon HTML:
+```html
+<div class="bg-stone-100 border-2 border-white w-6 h-6 rounded-full flex items-center justify-center shadow-sm">📌</div>
+```
+
+Dot icon HTML:
+```html
+<div class="bg-red-600 rounded-full w-2 h-2 border border-white"></div>
+```
+
+See `~/workspace/source/src/components/Map.tsx:74-85`.
+
+### Map Configuration
+
+- **Center**: NYC coordinates (40.749, -73.986)
+- **Bounds**: Limited to Northeast US region
+  - Southwest: (38, -79)
+  - Northeast: (47, -68)
+- **Zoom range**: 7 (min) to 20 (max)
+- **Tile provider**: Stadia Maps (Alidade Bright style)
+
+See `~/workspace/source/src/components/Map.tsx:38-62`.
+
+### Popups and Sheets
+
+When a marker is clicked:
+- Desktop: Shows popup near marker (planned)
+- Mobile: Shows bottom sheet with place details
+
+Sheet content includes:
+- Place name
+- Address
+- Notes (if available)
+- Date added
+
+See `~/workspace/source/src/components/Map.tsx:171-187` for Sheet component.
+
+## Usage Example
+
+### Basic Implementation
+
+```astro
+---
+import Map from '@components/Map';
+import { queryNotionDatabase } from '@lib/notion-cms';
+import { parseProperty } from '@lib/notion-parse';
+import type { Place } from '@lib/places';
+
+const dbPlaces = await queryNotionDatabase(import.meta.env.NOTION_DB_ID_PLACES);
+
+const places: Place[] = dbPlaces.map((page) => ({
+  name: parseProperty(page.properties["name"]),
+  address: parseProperty(page.properties["address"]),
+  latitude: parseFloat(parseProperty(page.properties["latitude"])),
+  longitude: parseFloat(parseProperty(page.properties["longitude"])),
+  notes: parseProperty(page.properties["notes"]),
+  timestampMs: parseInt(parseProperty(page.properties["timestampMs"])),
+  graphId: parseProperty(page.properties["graphId"]),
+}));
+---
+
+<Map client:only="solid-js" places={places} />
+```
+
+See `~/workspace/source/src/pages/places.astro:14-42` for the full implementation.
+
+### Required Stylesheets
+
+Include Leaflet CSS in the page `<head>`:
+
+```astro
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""
+  slot="head"
+/>
+```
+
+Also import custom Leaflet styles:
+
+```astro
+---
+import '../styles/leaflet.css';
+---
+```
+
+## State Management
+
+The component uses Solid.js signals for reactive state:
+
+```typescript
+const [map, setMap] = createSignal<L.Map | null>(null);
+const [selectedPlace, setSelectedPlace] = createSignal<Place | null>(null);
+const [viewport, setViewport] = createSignal(null);
+```
+
+See `~/workspace/source/src/components/Map.tsx:32-34`.
+
+## Event Handlers
+
+### onClickMarker
+
+Triggered when a marker is clicked:
+```typescript
+function onClickMarker(place: Place) {
+  setSelectedPlace(place);
+  // Future: recenter map if sheet covers marker
+}
+```
+
+See `~/workspace/source/src/components/Map.tsx:146-149`.
+
+### onClickMap
+
+Triggered when clicking empty map area:
+```typescript
+function onClickMap() {
+  setSelectedPlace(null); // Close sheet/popup
+}
+```
+
+See `~/workspace/source/src/components/Map.tsx:151-153`.
+
+### updateMarkerVisibility
+
+Triggered on zoom end:
+```typescript
+function updateMarkerVisibility(
+  pinMarkerGroup: L.LayerGroup,
+  dotMarkerGroup: L.LayerGroup,
+) {
+  const zoom = map()?.getZoom();
+  if (zoom < MIN_ZOOM_PINS) {
+    // Show dots, hide pins
+  } else {
+    // Show pins, hide dots
+  }
+}
+```
+
+See `~/workspace/source/src/components/Map.tsx:122-144`.
+
+## Solid.js Integration
+
+The component uses Solid.js lifecycle methods:
+
+- **onMount**: Initialize Leaflet map, add markers, set up event listeners
+- **onCleanup**: Remove map instance when component unmounts
+
+```typescript
+onMount(() => {
+  const map = L.map("map", { /* config */ });
+  // ... setup
+  setMap(map);
+});
+
+onCleanup(() => {
+  map()?.remove();
+});
+```
+
+See `~/workspace/source/src/components/Map.tsx:37-120` and `~/workspace/source/src/components/Map.tsx:155-158`.
+
+## Customizing the Map
+
+### Change Tile Provider
+
+Replace the Stadia Maps tiles with another provider:
+
+```typescript
+const customTiles = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+L.tileLayer(customTiles, {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+```
+
+### Adjust Map Bounds
+
+Modify the geographic constraints:
+
+```typescript
+const southWest = L.latLng(35, -85); // Further south and west
+const northEast = L.latLng(50, -65); // Further north and east
+const bounds = L.latLngBounds(southWest, northEast);
+```
+
+### Change Zoom Threshold
+
+Modify when pins vs dots are shown:
+
+```typescript
+const MIN_ZOOM_PINS = 12; // Show pins at higher zoom only
+```
+
+## Data Sources
+
+Places data can come from:
+
+1. **Notion Database**: Query `NOTION_DB_ID_PLACES` at build time
+2. **Google Maps**: Scrape saved places using Puppeteer (see `src/lib/places.ts`)
+3. **Static JSON**: Load from `public/places.json`
+
+## Related Components
+
+- [Layout Component](/components/layout) - Use `main-p-0` slot for full-width maps
+- [Icon Component](/components/icons) - Could be used for custom marker icons
+
+## Dependencies
+
+- `leaflet`: ^1.9.4 - Core mapping library
+- `solid-js`: ^1.9.5 - Reactive UI framework
+- `date-fns`: Date formatting for timestamps

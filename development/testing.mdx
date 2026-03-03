@@ -1,0 +1,539 @@
+---
+title: Testing with Vitest
+description: Testing setup, patterns, and best practices using Vitest
+---
+
+This project uses **Vitest** for unit testing, providing a fast and modern testing experience with native TypeScript support.
+
+## Testing Setup
+
+### Installation
+
+Vitest is already configured in the project:
+
+```json
+// package.json
+{
+  "devDependencies": {
+    "vitest": "^4.0.17"
+  },
+  "scripts": {
+    "test": "vitest",
+    "coverage": "vitest run --coverage"
+  }
+}
+```
+
+### Running Tests
+
+<Steps>
+  <Step title="Run tests in watch mode">
+    ```bash
+    pnpm test
+    ```
+    
+    Tests run automatically when files change.
+  </Step>
+
+  <Step title="Run tests once">
+    ```bash
+    pnpm vitest run
+    ```
+    
+    Useful for CI/CD pipelines.
+  </Step>
+
+  <Step title="Generate coverage report">
+    ```bash
+    pnpm coverage
+    ```
+    
+    Outputs coverage statistics and HTML report.
+  </Step>
+
+  <Step title="Run specific test file">
+    ```bash
+    pnpm test src/lib/tests/notion-parse.test.ts
+    ```
+  </Step>
+</Steps>
+
+## Test File Structure
+
+Tests are organized in `src/lib/tests/`:
+
+```
+src/lib/
+├── notion-parse.ts           # Implementation
+└── tests/
+    └── notion-parse.test.ts  # Tests
+```
+
+**Naming convention:** `[filename].test.ts`
+
+## Writing Tests
+
+### Basic Test Structure
+
+From `src/lib/tests/notion-parse.test.ts:1-128`:
+
+```typescript
+import { expect, test } from 'vitest';
+import { parseRichTextBlock } from '../notion-parse';
+
+test('parse rich text simple', () => {
+  const input = {
+    rich_text: [{
+      type: 'text',
+      text: { content: 'hello world', link: null },
+      annotations: {
+        bold: false,
+        italic: false,
+        strikethrough: false,
+        underline: false,
+        code: false,
+        color: 'default'
+      },
+      plain_text: 'hello world',
+      href: null
+    }]
+  };
+
+  const output = parseRichTextBlock(input);
+  
+  expect(output).toBe('hello world');
+});
+```
+
+### Using describe Blocks
+
+```typescript
+import { describe, it, expect } from 'vitest';
+
+describe('parseRichTextBlock', () => {
+  it('should parse simple text', () => {
+    // Test implementation
+  });
+  
+  it('should handle bold text', () => {
+    // Test implementation
+  });
+  
+  it('should handle multiple annotations', () => {
+    // Test implementation
+  });
+});
+```
+
+### Test Assertions
+
+Common assertion patterns:
+
+```typescript
+// Equality
+expect(result).toBe('expected');
+expect(object).toEqual({ key: 'value' });
+
+// Truthiness
+expect(value).toBeTruthy();
+expect(value).toBeFalsy();
+expect(value).toBeNull();
+expect(value).toBeUndefined();
+
+// Numbers
+expect(count).toBeGreaterThan(5);
+expect(count).toBeLessThan(10);
+
+// Arrays
+expect(array).toContain('item');
+expect(array).toHaveLength(3);
+
+// Objects
+expect(obj).toHaveProperty('key');
+expect(obj).toMatchObject({ partial: 'match' });
+
+// Exceptions
+expect(() => dangerousFunction()).toThrow();
+expect(() => dangerousFunction()).toThrow('Error message');
+```
+
+## Testing Patterns
+
+### Testing Notion Block Parsing
+
+Real example from the codebase (notion-parse.test.ts:35-72):
+
+```typescript
+import type { RichTextBlock } from '../notion-types';
+
+const RICH_TEXT_BASE: RichTextBlock = {
+  rich_text: [{
+    type: 'text',
+    text: { content: 'paragraph text', link: null },
+    annotations: {
+      bold: false,
+      italic: false,
+      strikethrough: false,
+      underline: false,
+      code: false,
+      color: 'default'
+    },
+    plain_text: 'hello world',
+    href: null
+  }]
+};
+
+test('parse rich text single annotations', () => {
+  // Test bold
+  const expectedBold = '<b>hello world</b>';
+  const richTextBold = {
+    rich_text: RICH_TEXT_BASE.rich_text.map(token => ({
+      ...token,
+      annotations: { ...token.annotations, bold: true }
+    }))
+  };
+  const outputBold = parseRichTextBlock(richTextBold);
+  expect(outputBold).toBe(expectedBold);
+  
+  // Test italic
+  const expectedItalic = '<i>hello world</i>';
+  const richTextItalic = {
+    rich_text: RICH_TEXT_BASE.rich_text.map(token => ({
+      ...token,
+      annotations: { ...token.annotations, italic: true }
+    }))
+  };
+  const outputItalic = parseRichTextBlock(richTextItalic);
+  expect(outputItalic).toBe(expectedItalic);
+});
+```
+
+### Testing Combined Annotations
+
+From notion-parse.test.ts:74-92:
+
+```typescript
+test('parse rich text combined annotations', () => {
+  const expectedStack = '<s><i><b>hello world</b></i></s>';
+  const richTextStack = {
+    rich_text: RICH_TEXT_BASE.rich_text.map(token => ({
+      ...token,
+      annotations: {
+        ...token.annotations,
+        bold: true,
+        italic: true,
+        strikethrough: true
+      }
+    }))
+  };
+  const outputStack = parseRichTextBlock(richTextStack);
+  
+  expect(outputStack).toBe(expectedStack);
+});
+```
+
+### Using Test Fixtures
+
+Load test data from files:
+
+```typescript
+import * as sample from '../../../public/tests/sample.json';
+
+test('notion parse json', () => {
+  const expected = `
+# heading 1
+
+## heading 2
+
+paragraph text
+`;
+
+  const output = sample.children
+    .map(block => parse(block as any))
+    .join('');
+  
+  expect(output).toBe(expected);
+});
+```
+
+Fixture files go in `public/tests/`.
+
+### Helper Functions
+
+Create reusable test helpers:
+
+```typescript
+function annotateAll(
+  richText: RichTextBlock,
+  annotations: any
+): RichTextBlock {
+  return {
+    rich_text: richText.rich_text.map(token => ({
+      ...token,
+      annotations: { ...token.annotations, ...annotations }
+    }))
+  };
+}
+
+test('using helper', () => {
+  const richTextBold = annotateAll(RICH_TEXT_BASE, { bold: true });
+  const output = parseRichTextBlock(richTextBold);
+  expect(output).toBe('<b>hello world</b>');
+});
+```
+
+## Testing Best Practices
+
+### Structure
+
+<Check>
+  **Arrange-Act-Assert pattern:**
+  ```typescript
+  test('description', () => {
+    // Arrange - Set up test data
+    const input = createTestData();
+    
+    // Act - Execute the code under test
+    const result = functionToTest(input);
+    
+    // Assert - Verify the result
+    expect(result).toBe(expected);
+  });
+  ```
+</Check>
+
+### Naming
+
+<Check>
+  **Descriptive test names:**
+  ```typescript
+  // Good
+  test('should parse bold text correctly')
+  test('should throw error for invalid input')
+  
+  // Avoid
+  test('test1')
+  test('works')
+  ```
+</Check>
+
+### Coverage
+
+<Check>
+  **Test edge cases:**
+  - Empty inputs
+  - Null/undefined values
+  - Boundary conditions
+  - Error cases
+</Check>
+
+### Isolation
+
+<Check>
+  **Keep tests independent:**
+  - Each test should run in isolation
+  - Don't rely on test execution order
+  - Clean up after tests if needed
+</Check>
+
+## Testing TypeScript
+
+### Type Safety in Tests
+
+```typescript
+import type { RichTextItemResponse } from '@notionhq/client/build/src/api-endpoints';
+
+test('type-safe test', () => {
+  const richText: RichTextItemResponse = {
+    type: 'text',
+    text: { content: 'test', link: null },
+    annotations: {
+      bold: false,
+      italic: false,
+      strikethrough: false,
+      underline: false,
+      code: false,
+      color: 'default'
+    },
+    plain_text: 'test',
+    href: null
+  };
+  
+  // TypeScript ensures type safety
+  expect(richText.type).toBe('text');
+});
+```
+
+## Code Coverage
+
+### Viewing Coverage
+
+Generate and view coverage:
+
+```bash
+pnpm coverage
+```
+
+Coverage report shows:
+- **Statements:** % of statements executed
+- **Branches:** % of conditional branches tested
+- **Functions:** % of functions called
+- **Lines:** % of lines executed
+
+### Coverage Thresholds
+
+Aim for:
+- **80%+** statement coverage
+- **70%+** branch coverage
+- **80%+** function coverage
+
+<Note>
+  Focus on testing critical paths and business logic. 100% coverage isn't always necessary or practical.
+</Note>
+
+## Testing Notion Integration
+
+### Mocking Notion API
+
+For testing functions that call Notion:
+
+```typescript
+import { vi, describe, it, expect } from 'vitest';
+import { getBlock } from '../notion-cms';
+
+describe('getBlock', () => {
+  it('should fetch blocks from Notion', async () => {
+    // Mock the Notion client
+    const mockNotion = {
+      blocks: {
+        children: {
+          list: vi.fn().mockResolvedValue({
+            results: [/* mock blocks */]
+          })
+        }
+      }
+    };
+    
+    // Test with mock
+    const blocks = await getBlock('page-id', mockNotion as any);
+    expect(blocks).toHaveLength(1);
+  });
+});
+```
+
+### Testing Without API Calls
+
+Use fixture data instead of real API calls:
+
+```typescript
+import mockBlocks from '../../../public/tests/notion-blocks.json';
+
+test('parse blocks without API', () => {
+  const markdown = parseBlocks(mockBlocks);
+  expect(markdown).toContain('# Heading');
+});
+```
+
+## Continuous Integration
+
+### Running Tests in CI
+
+Add to your CI pipeline:
+
+```yaml
+# .github/workflows/test.yml
+name: Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v2
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm test
+      - run: pnpm coverage
+```
+
+## Debugging Tests
+
+### Using console.log
+
+```typescript
+test('debug test', () => {
+  const result = functionToTest();
+  console.log('Result:', result);
+  expect(result).toBe(expected);
+});
+```
+
+### VS Code Debugging
+
+1. Add breakpoint in test file
+2. Run test in debug mode
+3. Inspect variables and step through code
+
+### Vitest UI
+
+Run tests with UI:
+
+```bash
+pnpm vitest --ui
+```
+
+Opens a browser interface for exploring test results.
+
+## Common Testing Scenarios
+
+### Testing Async Functions
+
+```typescript
+test('async function', async () => {
+  const result = await fetchData();
+  expect(result).toEqual({ data: 'value' });
+});
+```
+
+### Testing Error Handling
+
+```typescript
+test('should throw error for invalid input', () => {
+  expect(() => parseInvalid(null)).toThrow('Invalid input');
+});
+
+test('async error handling', async () => {
+  await expect(fetchInvalid()).rejects.toThrow('Not found');
+});
+```
+
+### Testing Side Effects
+
+```typescript
+import { vi } from 'vitest';
+
+test('should call callback', () => {
+  const callback = vi.fn();
+  processData(data, callback);
+  
+  expect(callback).toHaveBeenCalled();
+  expect(callback).toHaveBeenCalledWith(expectedArg);
+});
+```
+
+## Next Steps
+
+- Review existing tests in `src/lib/tests/`
+- Add tests for new features
+- Maintain test coverage above 80%
+- Integrate tests into CI/CD pipeline
+
+## Resources
+
+- [Vitest Documentation](https://vitest.dev/)
+- [Vitest API Reference](https://vitest.dev/api/)
+- Project test examples: `src/lib/tests/notion-parse.test.ts`
